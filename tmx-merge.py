@@ -1,3 +1,4 @@
+import sys
 import tmxlib
 import math
 import os
@@ -17,11 +18,7 @@ def get_cropped_tile_image(tile, tile_size):
 	print "==== " + str(tile.number) + ", "  + str(tileBox) 
 	return croppedTile
 
-
-def shrink_and_crop(tilemap_path):
-        tilemap = tmxlib.Map.open(tilemap_path)
-	tileset = tilemap.tilesets[0]
-
+def shrink_and_crop(tileset):
         tilesAlreadyCropped = []
         blank_tile_numbers = []
         tile_mapping_content_2_tile_number  = {}
@@ -50,21 +47,34 @@ def shrink_and_crop(tilemap_path):
 	return (len(tilesAlreadyCropped), shrunk_tile_number_mapping, blank_tile_numbers)
 
 def get_texture_size_for_tileset(number_of_tiles):
-	closest_pow_two = math.ceil(math.log(number_of_tiles, 2))
-        width = (closest_pow_two / 2) + (closest_pow_two % 2)
-        height = closest_pow_two / 2
+	closest_pow_two = int(math.ceil(math.log(number_of_tiles, 2)))
+        width = int(closest_pow_two / 2) + int(closest_pow_two % 2)
+        height = int(closest_pow_two / 2)	
 	return (int(math.pow(2, width)), int(math.pow(2, height)))
 
-def reduce_tileset(tilemap_path, target_tilemap_path, reduced_tile_mapping, target_tileset_size, blank_tile_numbers):
-        tilemap = tmxlib.Map.open(tilemap_path)
-	tileset = tilemap.tilesets[0]
+def reduce_tileset(tileset, target_tilemap_path, target_tileset_texture_size):
+	tile_width = tileset.tile_size[0]			
+	tile_height = tileset.tile_size[1]			
 
+        target_tileset_size_px = (tile_width * target_tileset_texture_size[0], tile_height * target_tileset_texture_size[1])
+	target_tilemap_image = Image.new('RGBA', target_tileset_size_px)
+
+	combine_tilesets()
+
+#	original_tileset_image_source = tileset.image.source
+	original_tileset_image_source = 'first_things_first.png'
+	target_tilemap_image.save(os.path.join(target_tilemap_path, original_tileset_image_source))
+
+	
+
+
+def combine_tilesets(tileset, target_tilemap_path, reduced_tile_mapping, target_tileset_texture_size, blank_tile_numbers):        
 	target_tile_number = 1
 
 	tile_width = tileset.tile_size[0]			
 	tile_height = tileset.tile_size[1]			
 
-        target_tileset_size_px = (tile_width * target_tileset_size[0], tile_height * target_tileset_size[1])
+        target_tileset_size_px = (tile_width * target_tileset_texture_size[0], tile_height * target_tileset_texture_size[1])
 	target_tilemap_image = Image.new('RGBA', target_tileset_size_px)
 
 	reduced_tileset_mapping = {}
@@ -78,8 +88,8 @@ def reduce_tileset(tilemap_path, target_tilemap_path, reduced_tile_mapping, targ
 			
 			cropped_tile_image = get_cropped_tile_image(reduced_tile, tileset.tile_size)
 
-			box_left = (target_tile_number % target_tileset_size[1]) * tile_width
-			box_top = (target_tile_number / target_tileset_size[1]) * tile_height 
+			box_left = (target_tile_number % target_tileset_texture_size[1]) * tile_width
+			box_top = (target_tile_number / target_tileset_texture_size[1]) * tile_height 
 
 			paste_box = (box_left, box_top)
                 
@@ -96,8 +106,7 @@ def reduce_tileset(tilemap_path, target_tilemap_path, reduced_tile_mapping, targ
 	print "...................................." + str(len(tiles_processed))
 	return reduced_tileset_mapping
 
-def update_tilemap(tilemap_path, target_tilemap_path, reduced_tileset_mapping):
-        tilemap = tmxlib.Map.open(tilemap_path)
+def update_tilemap(tilemap, target_tilemap_filename, reduced_tileset_mapping):       
 	layer = tilemap.layers[0]
 	
 	for v in range(tilemap.size[0]):
@@ -110,33 +119,66 @@ def update_tilemap(tilemap_path, target_tilemap_path, reduced_tileset_mapping):
 				layer.set_value_at(pos, reduced_tileset_mapping[value])
 			else:
 				layer.set_value_at(pos, 0) # deleting?, setting to blank
-	target_tilemap_filename = os.path.join(target_tilemap_path, os.path.basename(tilemap_path))
 	tilemap.save(target_tilemap_filename)
 
-def print_tilemap(tile_map_path):
-        tilemap = tmxlib.Map.open(tile_map_path)
+def get_target_tilemap_filename(tilemap_path, target_tilemap_path):
+	target_tilemap_filename = os.path.join(target_tilemap_path, os.path.basename(tilemap_path))
+	return target_tilemap_filename
+
+def get_tilemap(tilemap_path):
+        tilemap = tmxlib.Map.open(tilemap_path)
+	return tilemap
+
+def get_tileset(tilemap):        
+	tileset = tilemap.tilesets[0]
+	return tileset
+
+def print_tilemap(tilemap):
 	layer = tilemap.layers[0]
 	tileset = tilemap.tilesets[0]
 	for tile in layer.all_tiles():
 		print " ... " + str(tile.number) + " , " + str(tile.pos)
+
+
+if len(sys.argv) < 2:
+	print "Usage tmx-merge.py tilemap.tmx [tilemap.tmx] outputdir"
+	quit()
+
+input_tilemap_filenames = sys.argv[1:-1]
+output_folder = sys.argv[-1]	
+#input_tilemap_filename = 'testz.tmx'
+#output_folder = 'output'
+
+
+tilesets = []
+shrink_results = []
+
+number_of_tiles = 0
+for input_tilemap_filename in input_tilemap_filenames:
+	print "tilemap filename " + input_tilemap_filename
+
+	tilemap = get_tilemap(input_tilemap_filename)
+	tileset = get_tileset(tilemap)
+	tilesets.append(tileset)
+#	print_tilemap(tilemap)
+
+	shrink_result = shrink_and_crop(tileset)
+	shrink_results.append(shrink_result)
+	number_of_tiles += shrink_result[0] 
 	
-input_tilemap_filename = 'testz.tmx'
-output_folder = 'output'
+	
 
-print_tilemap(input_tilemap_filename)
-
-shrink_result = shrink_and_crop(input_tilemap_filename)
-number_of_tiles = shrink_result[0] 
 target_tileset_size = get_texture_size_for_tileset(number_of_tiles)
+print "texture size " + str(target_tileset_size)
 
-print " ####### " + str(shrink_result[1])
+#print " ####### " + str(shrink_result[1])
 
+for tileset_shrink_result in zip(tilesets, shrink_results):
+	reduced_tileset_mapping = reduce_tileset(tileset_shrink_result[0], output_folder, tileset_shrink_result[1][1], target_tileset_size, tileset_shrink_result[1][2])
+#reduced_tileset_mapping = reduce_tileset(tileset, output_folder, shrink_result[1], target_tileset_size, shrink_result[2])
 
-reduced_tileset_mapping = reduce_tileset(input_tilemap_filename, output_folder, shrink_result[1], target_tileset_size, shrink_result[2])
+#print "####### reduced " + str(reduced_tileset_mapping)
+#print "####### blank " + str(shrink_result[2])
 
-print "####### reduced " + str(reduced_tileset_mapping)
-print "####### blank " + str(shrink_result[2])
-
-update_tilemap(input_tilemap_filename, output_folder, reduced_tileset_mapping)
-
+#update_tilemap(tilemap, get_target_tilemap_filename(input_tilemap_filename, output_folder), reduced_tileset_mapping)
 
