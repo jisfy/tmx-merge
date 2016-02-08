@@ -53,6 +53,23 @@ def get_texture_size_for_tileset(number_of_tiles):
         height = int(closest_pow_two / 2)	
 	return (int(math.pow(2, width)), int(math.pow(2, height)))
 
+#def get_texture_size_for_tileset_px(tileset, target_tileset_texture_size):
+#	tile_width = tileset.tile_size[0]			
+#	tile_height = tileset.tile_size[1]
+	
+#	target_tileset_size_px = (tile_width * target_tileset_texture_size[0], tile_height * target_tileset_texture_size[1])	
+
+#	return target_tileset_size_px
+
+def get_texture_size_for_tileset_px(tile_size, target_tileset_texture_size):
+	tile_width = tile_size[0]			
+	tile_height = tile_size[1]
+	
+	target_tileset_size_px = (tile_width * target_tileset_texture_size[0], tile_height * target_tileset_texture_size[1])	
+
+	return target_tileset_size_px
+
+
 def reduce_tilesets(tilesets, target_tilemap_path, shrink_results, target_tileset_texture_size):
 	tileset = tilesets[0]
 	tile_width = tileset.tile_size[0]			
@@ -91,8 +108,9 @@ def combine_tilesets(tileset, target_tilemap_image, reduced_tile_mapping, target
 			reduced_tile = tileset[reduced_tile_id]
 			
 			cropped_tile_image = get_cropped_tile_image(reduced_tile, tileset.tile_size)
-
-			cropped_tile_image.save('output/tt_' + str(tile_id) + ".png")
+			
+			### just here for debugging purposes
+			### cropped_tile_image.save('output/tt_' + str(tile_id) + ".png")
 
 			box_left = ((target_tile_number - 1) % target_tileset_texture_size[0]) * tile_width
 			box_top = ((target_tile_number - 1) / target_tileset_texture_size[0]) * tile_height
@@ -114,11 +132,13 @@ def combine_tilesets(tileset, target_tilemap_image, reduced_tile_mapping, target
 	return reduced_tileset_mapping
 
 def update_tilemap_layer(layer, source_layer, reduced_tileset_mapping):
+	print '========== updating layer ' + layer.name
 	for tile in source_layer.all_tiles():
 		value = tile.gid
-		print '========== updating layer ' + layer.name + " " + str(reduced_tileset_mapping)
-		print '========== updating layer ' + layer.name + '  with value ' + str(value)
+		#print '========== updating layer ' + layer.name + " " + str(reduced_tileset_mapping)
+		#print '========== updating layer ' + layer.name + '  with value ' + str(value) 
 		if (value != 0) and (value in reduced_tileset_mapping):
+		#	print '========== updating layer pos ' + str(tile.pos) + " and val " + str(reduced_tileset_mapping[value])
 			layer.set_value_at(tile.pos, reduced_tileset_mapping[value])
 		else:
 			layer.set_value_at(tile.pos, 0) # deleting?, setting to blank
@@ -135,18 +155,51 @@ def update_tilemap_layer(layer, source_layer, reduced_tileset_mapping):
 #			else:
 #				layer.set_value_at(pos, 0) # deleting?, setting to blank
 
-def update_tilemaps(tilemaps, target_tilemap_filename, reduced_tileset_mappings):       
-	tilemap_to_save = tilemaps[0]
-	layer = tilemap_to_save.layers[0]
+def get_map_size(tilemaps):
+	max_tilemap_height = 0
+	max_tilemap_width = 0
+	for tilemap in tilemaps:
+		max_tilemap_height = max(max_tilemap_height, tilemap.size[0])
+		max_tilemap_width = max(max_tilemap_width, tilemap.size[1])
 
-	tilemap_to_save.tilesets[0].image.source = 'first_things_first.png'
+	return (max_tilemap_height, max_tilemap_width)
+
+def get_tile_size(tilemaps):
+	max_tile_height = 0
+	max_tile_width = 0
+	for tilemap in tilemaps:
+		max_tile_height = max(max_tile_height, tilemap.tile_size[0])
+		max_tile_width = max(max_tile_width, tilemap.tile_size[1])
+
+	return (max_tile_height, max_tile_width)
+
+def update_tilemaps(tilemaps, target_tilemap_filename, reduced_tileset_mappings, target_tileset_size):       
+	# tilemap_to_save = tilemaps[0]
+        # SEGUIR POR AQUI MANANA, FALTARA CREAR LOS TILESETS COMO ENTRADAS EN EL TILEMAP NUEVO
+	tile_size = get_tile_size(tilemaps)
+	tilemap_to_save = tmxlib.map.Map(size = get_map_size(tilemaps), tile_size=tile_size)
+	tilemap_to_save.tilesets = tmxlib.tileset.TilesetList(tilemap_to_save)
+
+#	layer = tilemap_to_save.layers[0]
+
+	texture_size_for_tileset_px = get_texture_size_for_tileset_px(tile_size, target_tileset_size)
+	# tilemap_to_save.tilesets[0].image.source = 'first_things_first.png'
+	
+	tilemap_image = tmxlib.image_base.Image(source = 'first_things_first.png', size = texture_size_for_tileset_px)
+	#tilemap_image = tmxlib.image_base.Image(source = 'first_things_first.png')
+	tilemap_to_save.tilesets.insert(0, tmxlib.tileset.ImageTileset('sometileset', tile_size, tilemap_image))
+#	tilemap_to_save.tilesets[0].image = tilemap_image
+
+
+	#tilemap_to_save.tilesets[0].image.width = texture_size_for_tileset_px[0]
+	#tilemap_to_save.tilesets[0].image.height = texture_size_for_tileset_px[1]
 	
 	for tilemap_reduced_tileset_mapping in zip(tilemaps, reduced_tileset_mappings):
 		tilemap_to_update = tilemap_reduced_tileset_mapping[0]
 		source_layer = tilemap_to_update.layers[0]
-		source_layer_name = source_layer.name + "up"
-		tilemap_to_update.add_tile_layer(source_layer_name)
-		layer_to_update = tilemap_to_update.layers[source_layer_name]
+		source_layer_name = source_layer.name + "_up"
+		tilemap_to_save.add_tile_layer(source_layer_name)
+		layer_to_update = tilemap_to_save.layers[source_layer_name]
 		reduced_tileset_mapping = tilemap_reduced_tileset_mapping[1]
 
 		update_tilemap_layer(layer_to_update, source_layer, reduced_tileset_mapping)
@@ -219,14 +272,12 @@ print "texture size " + str(target_tileset_size)
 
 #print " ####### " + str(shrink_results)
 
-
 reduced_tileset_mappings = reduce_tilesets(tilesets, output_folder, shrink_results, target_tileset_size)
-
 
 #reduced_tileset_mapping = reduce_tileset(tileset, output_folder, shrink_result[1], target_tileset_size, shrink_result[2])
 
 print "####### reduced " + str(reduced_tileset_mappings[0])
 #print "####### blank " + str(shrink_result[2])
 
-update_tilemaps(tilemaps, get_target_tilemap_filename(input_tilemap_filename, output_folder), reduced_tileset_mappings)
+update_tilemaps(tilemaps, get_target_tilemap_filename(input_tilemap_filename, output_folder), reduced_tileset_mappings, target_tileset_size)
 
