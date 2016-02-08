@@ -102,30 +102,8 @@ def combine_tilesets(tileset, target_tilemap_image, reduced_tile_mapping, target
 				tiles_really_reduced.append(tile_id)
 				reduced_tile_id = reduced_tile_mapping[tile_id]
 
-				if not(reduced_tile_id in reduced_tileset_mapping):
-					print "reduced tile not seen til now " + str(reduced_tile_id)
-		                        #reduced_tile_id = reduced_tile_mapping[tile_id]	
-					reduced_tile = tileset[reduced_tile_id]
-			
-					cropped_tile_image = get_cropped_tile_image(reduced_tile, tileset.tile_size)
-			
-					### just here for debugging purposes
-					### cropped_tile_image.save('output/tt_' + str(tile_id) + ".png")
-
-					box_left = ((target_tile_number - 1) % target_tileset_texture_size[0]) * tile_width
-					box_top = ((target_tile_number - 1) / target_tileset_texture_size[0]) * tile_height
-		
-					paste_box = (box_left, box_top)
-		                
-					#print "............. " + str(tile_id) + " , " + str(paste_box)
-		
-					target_tilemap_image.paste(cropped_tile_image, paste_box)
-					reduced_tileset_mapping[tile_id] = target_tile_number
-			
-					target_tile_number += 1
-				else:
-					print "reduced tile already seen " + str(reduced_tile_id)
-					reduced_tileset_mapping[tile_id] = reduced_tileset_mapping[reduced_tile_id]
+				print "reduced tile already seen " + str(reduced_tile_id)
+				reduced_tileset_mapping[tile_id] = reduced_tileset_mapping[reduced_tile_id]
 			else:
 				print "non reduced tile " + str(reduced_tile_id) 
 				reduced_tile = tileset[reduced_tile_id]
