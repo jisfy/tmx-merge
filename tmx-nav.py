@@ -158,45 +158,6 @@ def get_image_size(tilemap):
 	image_height = tilemap.size[1] * tilemap.tile_size[1]
 	return (image_width, image_height)
 
-def print_image(platforms, tilemap, navpoints):
-	image = Image.new("RGBA", get_image_size(tilemap))
-
-	for platform in platforms.values():
-		image_draw = ImageDraw.Draw(image)
-                platform_position_left_pixels = platform.get_position()[0] * tilemap.tile_size[0]
-                platform_position_bottom_pixels = platform.get_position()[1] * tilemap.tile_size[1]
-                
-		left = platform.get_map_object().pixel_pos[0]
-                top = platform.get_map_object().pixel_pos[1] - platform.get_map_object().pixel_size[1]
-                bottom = platform.get_map_object().pixel_pos[1]
-		right = platform.get_map_object().pixel_pos[0] + platform.get_map_object().pixel_size[0]
-
-		box = [(left, top), (right, bottom)]
-		print "id " + str(platform.id) + ", " + str(box) 
-		image_draw.rectangle(box , outline="white")
-
-      	        id_text_size = image_draw.textsize(str(platform.id))
- 		text_left = left + ((platform.get_map_object().pixel_size[0] / 2) - (id_text_size[0] / 2))
-		text_top = top
-		image_draw.text((text_left, text_top), str(platform.id), fill="white")
-
-	for navpoint in navpoints:
-		navpoint_center_x = (navpoint.get_position()[0] * tilemap.tile_size[0]) + (tilemap.tile_size[0] / 2)
-		navpoint_center_y = (navpoint.get_position()[1] * tilemap.tile_size[1]) + (tilemap.tile_size[1] / 2)
-		navpoint_rect_size = (20, 20)
-		navpoint_rect_left = navpoint_center_x - (navpoint_rect_size[0] / 2) 
-		navpoint_rect_top = navpoint_center_y - (navpoint_rect_size[1] / 2) 
-		navpoint_rect_right = navpoint_rect_left + navpoint_rect_size[0]
-		navpoint_rect_bottom = navpoint_rect_top + navpoint_rect_size[1]
-		image_draw.rectangle([(navpoint_rect_left, navpoint_rect_top), (navpoint_rect_right, navpoint_rect_bottom)], outline="blue", fill="blue")
-		for navpoint_link in navpoint.links.values():
-			navpoint_link_target = navpoint_link.target_navpoint
-			navpoint_link_center_x = (navpoint_link_target.get_position()[0] * tilemap.tile_size[0]) + (tilemap.tile_size[0] / 2)
-			navpoint_link_center_y = (navpoint_link_target.get_position()[1] * tilemap.tile_size[1]) + (tilemap.tile_size[1] / 2)
-
-			image_draw.line([(navpoint_center_x, navpoint_center_y), (navpoint_link_center_x, navpoint_link_center_y)], fill="blue")
-
-	image.save('grabado.png', 'PNG', transparency=0)
 
 def add_border(grid, cell_position, id):
 	neighbor_row = cell_position[0] - 1
@@ -323,23 +284,41 @@ def add_horizontal_navpoint_links(grid, tilemap):
 			elif not(blank_but_walkable):
 				last_element = None
 
-def add_vertical_link_to_neighbors(grid, source_navpoint_position, tilemap, max_jump_height):
-	source_navpoint_position[0]
+def add_vertical_link_walk_up(grid, source_navpoint_position, tilemap, max_jump_height):
 	neighbor_col_index = source_navpoint_position[1] + 1
-	for row_index in range(tilemap.size[1]):
-		navpoint_exists = (row_index in grid) and (neighbor_col_index in grid[row_index]) and (grid[row_index][neighbor_col_index].element_type == "navpoint")
+	if (source_navpoint_position[0] - 1 >= 0):
+		for row_index in range(source_navpoint_position[0] - 1, -1, -1):
+			right_up_blank = not((row_index in grid) and (neighbor_col_index in grid[row_index]))
+			right_up_navpoint = not(right_up_blank) and (grid[row_index][neighbor_col_index].element_type == "navpoint")	
+			up_platform = (row_index in grid) and (source_navpoint_position[1] in grid[row_index]) and (grid[row_index][source_navpoint_position[1]].element_type == "platform")
 
-		if navpoint_exists:
-			if (source_navpoint_position[0] > row_index):
+			if up_platform:
+				break # check my own column, if there is a platform, maybe I can't jump
+			elif right_up_navpoint:				
 				if ((source_navpoint_position[0] - row_index) <= max_jump_height):
 					#jump link
 					grid[source_navpoint_position[0]][source_navpoint_position[1]].add_link(grid[row_index][neighbor_col_index], "jump", 0, 3)
 				grid[row_index][neighbor_col_index].add_link(grid[source_navpoint_position[0]][source_navpoint_position[1]], "fall", 3, 0)
-			elif (source_navpoint_position[0] < row_index):
-					# fall link
+			
+					
+def add_vertical_link_walk_down(grid, source_navpoint_position, tilemap, max_jump_height):
+	neighbor_col_index = source_navpoint_position[1] + 1
+	if (source_navpoint_position[0] + 1 <= tilemap.size[1]):
+		for row_index in range(source_navpoint_position[0] + 1, tilemap.size[1]):
+			right_down_blank = not((row_index in grid) and (neighbor_col_index in grid[row_index]))
+			right_down_navpoint = not(right_down_blank) and (grid[row_index][neighbor_col_index].element_type == "navpoint")	
+			right_down_platform = not(right_down_blank) and (grid[row_index][neighbor_col_index].element_type == "platform")
+
+			if right_down_platform:
+				break # check my own column, if there is a platform, maybe I can't jump
+			elif right_down_navpoint:				
 				if ((row_index - source_navpoint_position[0]) <= max_jump_height):
 					grid[row_index][neighbor_col_index].add_link(grid[source_navpoint_position[0]][source_navpoint_position[1]], "jump", 0, 3)
 				grid[source_navpoint_position[0]][source_navpoint_position[1]].add_link(grid[row_index][neighbor_col_index], "fall", 3, 0)	
+
+def add_vertical_link_to_neighbors(grid, source_navpoint_position, tilemap, max_jump_height):
+	add_vertical_link_walk_up(grid, source_navpoint_position, tilemap, max_jump_height)
+	add_vertical_link_walk_down(grid, source_navpoint_position, tilemap, max_jump_height)
 
 def add_vertical_navpoint_links(grid, tilemap):
 	for col_index in range(tilemap.size[0]):
@@ -348,90 +327,6 @@ def add_vertical_navpoint_links(grid, tilemap):
 			if (navpoint_exists):
 				add_vertical_link_to_neighbors(grid, (row_index, col_index), tilemap, 2)
 	
-def get_navpoints_new(tilemap, platforms):
-	navpoints = {}
-	index = 0
-	for platform in platforms.values():
-		added_border = 0
-		navpoint_border_left = None
-		navpoint_border_right = None
-		if ((platform.left == None) & (platform.get_map_object().pos[0] != 0)):
-			# check if the platform is on the left screen border
-
-			projected_point = get_projection_left(platform, platforms)
-			navpoint_projected = NavPoint(index, projected_point)
-			navpoints[index] = navpoint_projected
-			index +=1
-
-			border_point = get_border_left(platform, platforms)
-			if border_point != None:
-				navpoint_border_left = NavPoint(index, border_point)
-				navpoints[index] = navpoint_border_left
-				navpoint_border_left.add_link(navpoint_projected, "walk", -3, 0)
-				index +=1
-				added_border +=1
-
-
-		if ((platform.right == None) & (platform.get_map_object().pos[0] + platform.get_map_object().size[0] != tilemap.size[0])):
-			# check if the platform is on the right screen border
-
-			projected_point = get_projection_right(platform, platforms)
-			navpoint_projected = NavPoint(index, projected_point)
-			navpoints[index] = navpoint_projected
-			index +=1
-			
-			border_point = get_border_right(platform, platforms)
-			if border_point != None:
-				navpoint_border_right = NavPoint(index, border_point)
-				navpoints[index] = navpoint_border_right
-				navpoint_border_right.add_link(navpoint_projected, "walk", 3, 0)
-				index +=1
-				added_border +=1
-
-		if (added_border == 2):
-			navpoint_border_left.add_link(navpoint_border_right, "walk", 3, 0)
-			navpoint_border_right.add_link(navpoint_border_left, "walk", -3, 0)
-
-	return navpoints
-
-def get_navpoint_graph(navpoints, max_jump_height):
-	navpoint_graph = {}
-	index = 0
-	for navpoint in navpoints:
-
-		if index in navpoint_graph:
-			current_navpoint = navpoint_graph[index]
-		else:
-			print ".... Adding Navpoint " + str(index)
-			current_navpoint = NavPoint(index, navpoint)
-			navpoint_graph[index] = current_navpoint
-
-		for next_index in range(index + 1, len(navpoints)):
-			next_further_right = (navpoint[0] == (navpoints[next_index][0] - 1))
-			distance_up_next = navpoint[1] - navpoints[next_index][1]
-			next_further_up_reachable = ((distance_up_next > 0) & (distance_up_next <= max_jump_height))
-			next_further_down = navpoint[1] > navpoints[next_index][1]
-			next_same_height = (distance_up_next == 0)
-
-			if next_further_right & next_further_up_reachable:
-				next_navpoint = NavPoint(next_index, navpoints[next_index])
-				navpoint_graph[next_index] = next_navpoint
-				current_navpoint.add_link(next_navpoint, 0, 0)				
-			elif next_further_right & next_further_down:
-				pass
-			elif next_same_height:
-				next_navpoint = NavPoint(next_index, navpoints[next_index])
-				navpoint_graph[next_index] = next_navpoint
-				current_navpoint.add_link(next_navpoint, 0, 0)
-
-		index +=1
-
-	return navpoint_graph
-		
-
-def print_platforms(platforms):
-	for platform in platforms.values():
-		print ".. " + str(platform)
 
 if len(sys.argv) < 2:
 	print "Usage tmx-navmesh.py tilemap.tmx outputdir"
