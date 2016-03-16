@@ -300,19 +300,27 @@ def add_navpoints(tilemap, grid):
 
 	return navpoint_id
 
-def add_horizontal_navpoint_links(grid):
+def add_horizontal_navpoint_links(grid, tilemap):
 	for row_index in sorted(grid.keys()):
 		last_element = None
-		for col_index in sorted(grid[row_index].keys()):
-			grid_element = grid[row_index][col_index]
-			if (grid_element.element_type == "navpoint"):
+		# for col_index in sorted(grid[row_index].keys()):
+		for col_index in range(tilemap.size[0]):
+			next_is_blank = not((row_index in grid) and (col_index in grid[row_index]))
+			next_is_navpoint = not(next_is_blank) and (grid[row_index][col_index].element_type == "navpoint")
+			next_below_is_platform = ((row_index + 1) <= tilemap.size[0]) and ((row_index + 1) in grid) and (col_index in grid[row_index + 1]) and (grid[row_index + 1][col_index].element_type == "platform")
+			blank_but_walkable = next_is_blank and next_below_is_platform
+
+			#grid_element = grid[row_index][col_index]
+			#if (grid_element.element_type == "navpoint"):
+			if next_is_navpoint:
+				grid_element = grid[row_index][col_index]
 				if (last_element != None):
 					last_element.add_link(grid_element, "walk", 3, 0)
 					grid_element.add_link(last_element, "walk", -3, 0)
 					last_element = grid_element
 				else:
 					last_element = grid_element
-			else:
+			elif not(blank_but_walkable):
 				last_element = None
 
 def add_vertical_link_to_neighbors(grid, source_navpoint_position, tilemap, max_jump_height):
@@ -442,6 +450,6 @@ print "...... tilemap size in tiles " + str(tilemap.size)
 grid = build_grid(tilemap)
 last_navpoint_id = add_navpoints(tilemap, grid)
 add_projected_navpoints(tilemap, grid, last_navpoint_id)
-add_horizontal_navpoint_links(grid)
+add_horizontal_navpoint_links(grid, tilemap)
 add_vertical_navpoint_links(grid, tilemap)
 print_grid(grid, tilemap, None)
