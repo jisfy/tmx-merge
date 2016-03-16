@@ -11,6 +11,7 @@ class NavLink:
 		self.vertical_speed = None
 		self.horizontal_speed = None
 		self.navtype = navtype
+		self.link_type_colors = {'fall':'red', 'jump':'blue', 'walk':'yellow'}
 
 	def set_horizontal_speed(self, horizontal_speed):
 		self.horizontal_speed = horizontal_speed
@@ -22,7 +23,8 @@ class NavLink:
 		navpoint_link_center_x = (self.target_navpoint.get_position()[1] * tile_size[1]) + (tile_size[1] / 2)
 		navpoint_link_center_y = (self.target_navpoint.get_position()[0] * tile_size[0]) + (tile_size[0] / 2)
 
-		image_draw.line([position, (navpoint_link_center_x, navpoint_link_center_y)], fill="blue")
+		color = self.link_type_colors[self.navtype]
+		image_draw.line([position, (navpoint_link_center_x, navpoint_link_center_y)], fill=color)
 
 	def __repr__(self):
 		repr = "--> " + str(self.target_navpoint.id) + " speed x : " + str(self.horizontal_speed) + " speed y :" + str(self.vertical_speed)
@@ -87,6 +89,12 @@ class NavPoint(GridElement):
 		navpoint_rect_bottom = navpoint_rect_top + navpoint_rect_size[1]
 		# print "- drawing NavPoint " + str(navpoint_rect_left) + " , " + str(navpoint_rect_top)
 		image_draw.rectangle([(navpoint_rect_left, navpoint_rect_top), (navpoint_rect_right, navpoint_rect_bottom)], outline="blue", fill="blue")
+
+	        id_text_size = image_draw.textsize(str(self.id))
+		text_left = navpoint_center_x - (id_text_size[0] / 2)
+		text_top = navpoint_center_y - (id_text_size[1] / 2)
+		image_draw.text((text_left, text_top), str(self.id), fill="white")
+
 		for navpoint_link in self.links.values():
 			navpoint_link.draw(image_draw, (navpoint_center_x, navpoint_center_y), tile_size)
 
@@ -292,7 +300,6 @@ def add_navpoints(tilemap, grid):
 
 	return navpoint_id
 
-
 def add_horizontal_navpoint_links(grid):
 	for row_index in sorted(grid.keys()):
 		last_element = None
@@ -307,6 +314,31 @@ def add_horizontal_navpoint_links(grid):
 					last_element = grid_element
 			else:
 				last_element = None
+
+def add_vertical_link_to_neighbors(grid, source_navpoint_position, tilemap, max_jump_height):
+	source_navpoint_position[0]
+	neighbor_col_index = source_navpoint_position[1] + 1
+	for row_index in range(tilemap.size[1]):
+		navpoint_exists = (row_index in grid) and (neighbor_col_index in grid[row_index]) and (grid[row_index][neighbor_col_index].element_type == "navpoint")
+
+		if navpoint_exists:
+			if (source_navpoint_position[0] > row_index):
+				if ((source_navpoint_position[0] - row_index) <= max_jump_height):
+					#jump link
+					grid[source_navpoint_position[0]][source_navpoint_position[1]].add_link(grid[row_index][neighbor_col_index], "jump", 0, 3)
+				grid[row_index][neighbor_col_index].add_link(grid[source_navpoint_position[0]][source_navpoint_position[1]], "fall", 3, 0)
+			elif (source_navpoint_position[0] < row_index):
+					# fall link
+				if ((row_index - source_navpoint_position[0]) <= max_jump_height):
+					grid[row_index][neighbor_col_index].add_link(grid[source_navpoint_position[0]][source_navpoint_position[1]], "jump", 0, 3)
+				grid[source_navpoint_position[0]][source_navpoint_position[1]].add_link(grid[row_index][neighbor_col_index], "fall", 3, 0)	
+
+def add_vertical_navpoint_links(grid, tilemap):
+	for col_index in range(tilemap.size[0]):
+		for row_index in range(tilemap.size[1]):
+			navpoint_exists = (row_index in grid) and (col_index in grid[row_index]) and (grid[row_index][col_index].element_type == "navpoint")
+			if (navpoint_exists):
+				add_vertical_link_to_neighbors(grid, (row_index, col_index), tilemap, 2)
 	
 def get_navpoints_new(tilemap, platforms):
 	navpoints = {}
@@ -411,4 +443,5 @@ grid = build_grid(tilemap)
 last_navpoint_id = add_navpoints(tilemap, grid)
 add_projected_navpoints(tilemap, grid, last_navpoint_id)
 add_horizontal_navpoint_links(grid)
+add_vertical_navpoint_links(grid, tilemap)
 print_grid(grid, tilemap, None)
