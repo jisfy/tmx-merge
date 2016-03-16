@@ -18,6 +18,12 @@ class NavLink:
 	def set_vertical_speed(self, vertical_speed):
 		self.vertical_speed = vertical_speed
 
+	def draw(self, image_draw, position, tile_size):
+		navpoint_link_center_x = (self.target_navpoint.get_position()[1] * tile_size[1]) + (tile_size[1] / 2)
+		navpoint_link_center_y = (self.target_navpoint.get_position()[0] * tile_size[0]) + (tile_size[0] / 2)
+
+		image_draw.line([position, (navpoint_link_center_x, navpoint_link_center_y)], fill="blue")
+
 	def __repr__(self):
 		repr = "--> " + str(self.target_navpoint.id) + " speed x : " + str(self.horizontal_speed) + " speed y :" + str(self.vertical_speed)
 		return repr
@@ -81,6 +87,8 @@ class NavPoint(GridElement):
 		navpoint_rect_bottom = navpoint_rect_top + navpoint_rect_size[1]
 		# print "- drawing NavPoint " + str(navpoint_rect_left) + " , " + str(navpoint_rect_top)
 		image_draw.rectangle([(navpoint_rect_left, navpoint_rect_top), (navpoint_rect_right, navpoint_rect_bottom)], outline="blue", fill="blue")
+		for navpoint_link in self.links.values():
+			navpoint_link.draw(image_draw, (navpoint_center_x, navpoint_center_y), tile_size)
 
 	def __repr__(self):
 		repr = "{id : " + str(self.id) + ";pos: " + str(self.position_tile) + ";links: " + str(self.links) + "}\n" 
@@ -131,10 +139,11 @@ def print_grid(grid, tilemap, navpoints):
 			grid_element = grid[row_index][col_index]
 			
 			# print "....... " + "row " + str(row_index) + " col " + str(col_index) + " Grid ->" + str(grid_element)
+			if (grid_element.element_type == "navpoint"):
+				print " ....... " + "row " + str(row_index) + " col " + str(col_index) + " links" + str(grid_element.links)
 			grid_element.draw(image_draw, (row_index, col_index), tilemap.tile_size)
 
 	image.save('grabado_3.png', 'PNG', transparency=0)
-
 
 def get_image_size(tilemap):
 	image_width = tilemap.size[0] * tilemap.tile_size[0]
@@ -180,22 +189,6 @@ def print_image(platforms, tilemap, navpoints):
 			image_draw.line([(navpoint_center_x, navpoint_center_y), (navpoint_link_center_x, navpoint_link_center_y)], fill="blue")
 
 	image.save('grabado.png', 'PNG', transparency=0)
-
-
-def get_projection_left(platform_to_project, platforms): 
-	projected_platform = None
-	projected_point = None
-
-	for platform in platforms.values():
-		print "####### candidate " + str(platform.get_position()) + " plat_to_proj " + str(platform_to_project.get_position()) + " ptop " + str(platform.get_top_tile()) 
-		if ((platform.get_position()[0] < platform_to_project.get_position()[0]) & (platform.get_size()[0] > 1) & (platform.get_top_tile() >= platform_to_project.get_position()[1]) & (platform_to_project != platform)):
-			# check if the current platform starts further to the left and is below the platform to project							  # if so, that would mean the current platform is a projection candidate
-			print "............ = " + str(platform) + " ..... " + str(projected_platform)
-			if is_higher(platform, projected_platform):
-				projected_platform = platform			
-				projected_point = (platform_to_project.get_position()[0] - 1, platform.get_top_tile()) 
-
-	return projected_point
 
 def add_border(grid, cell_position, id):
 	neighbor_row = cell_position[0] - 1
@@ -260,7 +253,7 @@ def add_projected_navpoints(tilemap, grid, first_navpoint_id):
 		
 			if (cell_is_platform) and (should_have_left_projection(grid, (row_index, col_index), tilemap.size)):
 				projection_found = find_left_projection(grid, (row_index, col_index), tilemap.size)
-				print " should have left r:" + str(row_index) + ", c:" + str(col_index) + ",p:" + str(projection_found)
+				# print " should have left r:" + str(row_index) + ", c:" + str(col_index) + ",p:" + str(projection_found)
 				if projection_found != None:
 					grid[projection_found[0]][projection_found[1]] = NavPoint(navpoint_id, projection_found)
 					navpoint_id +=1 
@@ -268,7 +261,7 @@ def add_projected_navpoints(tilemap, grid, first_navpoint_id):
 
 			if (cell_is_platform) and (should_have_right_projection(grid, (row_index, col_index), tilemap.size)):	
 				projection_found = find_right_projection(grid, (row_index, col_index), tilemap.size)
-				print " should have right r:" + str(row_index) + ", c:" + str(col_index) + ",p:" + str(projection_found)
+				# print " should have right r:" + str(row_index) + ", c:" + str(col_index) + ",p:" + str(projection_found)
 				if projection_found != None:
 					grid[projection_found[0]][projection_found[1]] = NavPoint(navpoint_id, projection_found)
 					navpoint_id +=1
@@ -299,6 +292,22 @@ def add_navpoints(tilemap, grid):
 
 	return navpoint_id
 
+
+def add_horizontal_navpoint_links(grid):
+	for row_index in sorted(grid.keys()):
+		last_element = None
+		for col_index in sorted(grid[row_index].keys()):
+			grid_element = grid[row_index][col_index]
+			if (grid_element.element_type == "navpoint"):
+				if (last_element != None):
+					last_element.add_link(grid_element, "walk", 3, 0)
+					grid_element.add_link(last_element, "walk", -3, 0)
+					last_element = grid_element
+				else:
+					last_element = grid_element
+			else:
+				last_element = None
+	
 def get_navpoints_new(tilemap, platforms):
 	navpoints = {}
 	index = 0
@@ -344,7 +353,6 @@ def get_navpoints_new(tilemap, platforms):
 			navpoint_border_right.add_link(navpoint_border_left, "walk", -3, 0)
 
 	return navpoints
-
 
 def get_navpoint_graph(navpoints, max_jump_height):
 	navpoint_graph = {}
@@ -399,8 +407,8 @@ print "...... tilemap size in tiles " + str(tilemap.size)
 #print_image(platforms, tilemap, navpoint_graph.values())
 #print "Navpoint Graph " + str(navpoint_graph)
 
-
 grid = build_grid(tilemap)
 last_navpoint_id = add_navpoints(tilemap, grid)
 add_projected_navpoints(tilemap, grid, last_navpoint_id)
+add_horizontal_navpoint_links(grid)
 print_grid(grid, tilemap, None)
