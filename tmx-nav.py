@@ -32,8 +32,8 @@ class NavLink:
 
 	def __init__(self, target_navpoint, navtype, horizontal_speed, vertical_speed):
 		self.target_navpoint = target_navpoint
-		self.vertical_speed = None
-		self.horizontal_speed = None
+		self.vertical_speed = vertical_speed
+		self.horizontal_speed = horizontal_speed
 		self.navtype = navtype
 		self.link_type_colors = {'fall':'red', 'jump':'blue', 'walk':'yellow'}
 
@@ -51,7 +51,7 @@ class NavLink:
 		image_draw.line([position, (navpoint_link_center_x, navpoint_link_center_y)], fill=color)
 
 	def __repr__(self):
-		repr = "--> " + str(self.target_navpoint.id) + " speed x : " + str(self.horizontal_speed) + " speed y :" + str(self.vertical_speed)
+		repr = "--> " + str(self.target_navpoint.id) + ",type: " + str(self.navtype) + ",speed x : " + str(self.horizontal_speed) + " speed y :" + str(self.vertical_speed)
 		return repr
 
 class GridElement:
@@ -315,6 +315,15 @@ def get_obstacle_height_m(bottom_position_row, obstacle_position_row, tilemap, j
 	print "... obs height m " + str(obstacle_height_m) + " ... obs height tiles " + str(obstacle_height_tiles) + " ... obs height px " + str(obstacle_height_px)
 	return obstacle_height_m
 
+def correct_navpoint_position(vertical_velocity, jump_and_falling_height, jump_calculation_data):
+	step_velocity = jump_calculation_data.get_step_period() * vertical_velocity
+	time_to_max_height = get_max_height_time(jump_calculation_data.get_step_world_gravity(), step_velocity)
+
+#	falling_time_til_obstacle = get_falling_time_til_obstacle(jump_calculation_data.get_step_world_gravity(), step_velocity, jump_and_falling_height[1])
+	falling_time_til_obstacle = get_falling_time_til_obstacle(jump_calculation_data.get_step_world_gravity(), step_velocity, jump_and_falling_height[0])
+	distance_traveled_horizontally = get_distance_travelled_horizontally(jump_calculation_data.get_step_walk(), time_to_max_height, falling_time_til_obstacle)
+	print "~~~~~~~ Distance Traveled " + str(distance_traveled_horizontally)
+
 def add_vertical_link_walk_up(grid, source_navpoint_position, tilemap, jump_calculation_data):
 	neighbor_col_index = source_navpoint_position[1] + 1
 	if (source_navpoint_position[0] - 1 >= 0):
@@ -326,17 +335,14 @@ def add_vertical_link_walk_up(grid, source_navpoint_position, tilemap, jump_calc
 			if up_platform:
 				break # check my own column, if there is a platform, maybe I can't jump
 			elif right_up_navpoint:	
-				# obstacle_height_tiles = (source_navpoint_position[0] - row_index)
-				# obstacle_height_px = obstacle_height_tiles * tilemap.tile_size[1]
-				# obstacle_height = obstacle_height_px / jump_calculation_data.pixels_per_meter
-
 				obstacle_height_m = get_obstacle_height_m(source_navpoint_position[0], row_index, tilemap, jump_calculation_data)
 				jump_falling_height = get_jump_and_falling_height_for_obstacle(obstacle_height_m, jump_calculation_data.character_height, jump_calculation_data.extra_jump_percent)			
-				print "####### jump falling height " + str(jump_falling_height[0])
 				if (jump_falling_height[0] <= jump_calculation_data.max_jump_height):
-				# if ((source_navpoint_position[0] - row_index) <= jump_calculation_data.max_jump_height):
 					#jump link
-					grid[source_navpoint_position[0]][source_navpoint_position[1]].add_link(grid[row_index][neighbor_col_index], "jump", 0, 3)
+					jump_velocity = get_vertical_velocity(jump_falling_height[0], jump_calculation_data.get_step_period(), jump_calculation_data.get_step_world_gravity())
+					print "~~~~~~~ Jump " + str(jump_velocity)
+					correct_navpoint_position(jump_velocity, jump_falling_height, jump_calculation_data)
+					grid[source_navpoint_position[0]][source_navpoint_position[1]].add_link(grid[row_index][neighbor_col_index], "jump", 0, jump_velocity)
 				grid[row_index][neighbor_col_index].add_link(grid[source_navpoint_position[0]][source_navpoint_position[1]], "fall", jump_calculation_data.walk_speed, 0)
 			
 					
@@ -350,9 +356,13 @@ def add_vertical_link_walk_down(grid, source_navpoint_position, tilemap, jump_ca
 
 			if right_down_platform:
 				break # check my own column, if there is a platform, maybe I can't jump
-			elif right_down_navpoint:				
-				if ((row_index - source_navpoint_position[0]) <= jump_calculation_data.max_jump_height):
-					grid[row_index][neighbor_col_index].add_link(grid[source_navpoint_position[0]][source_navpoint_position[1]], "jump", 0, 3)
+			elif right_down_navpoint:
+				obstacle_height_m = get_obstacle_height_m(row_index, source_navpoint_position[0], tilemap, jump_calculation_data)
+				jump_falling_height = get_jump_and_falling_height_for_obstacle(obstacle_height_m, jump_calculation_data.character_height, jump_calculation_data.extra_jump_percent)			
+				if (jump_falling_height[0] <= jump_calculation_data.max_jump_height):				
+				# if ((row_index - source_navpoint_position[0]) <= jump_calculation_data.max_jump_height):
+					jump_velocity = get_vertical_velocity(jump_falling_height[0], jump_calculation_data.get_step_period(), jump_calculation_data.get_step_world_gravity())
+					grid[row_index][neighbor_col_index].add_link(grid[source_navpoint_position[0]][source_navpoint_position[1]], "jump", 0, jump_velocity)
 				grid[source_navpoint_position[0]][source_navpoint_position[1]].add_link(grid[row_index][neighbor_col_index], "fall", jump_calculation_data.walk_speed, 0)	
 
 def add_vertical_link_to_neighbors(grid, source_navpoint_position, tilemap, jump_calculation_data):
@@ -400,6 +410,7 @@ def get_jump_and_falling_height_for_obstacle(obstacle_height, character_height, 
 	jump_height = half_character_height + obstacle_height
 	extra_falling_height_til_obstacle = (jump_height * extra_jump_height_percent / 100.0)	
 	jump_height_extra = extra_falling_height_til_obstacle + jump_height
+	print "********* jump height " + str(jump_height_extra) 
 	return (jump_height_extra, extra_falling_height_til_obstacle)
 
 
@@ -429,6 +440,10 @@ def get_distance_travelled_horizontally(step_velocity_horizontal, raising_time, 
 ####
 ####              JUMP VELOCITY AND HEIGHT LOGIC
 ####
+
+
+####              MAIN
+####              sample line : python tmx-nav.py navmesh/background4.tmx 3 2 60 1 20 108 output.png
 
 if len(sys.argv) < 8:
 	print "Usage tmx-navmesh.py tilemap.tmx walk_speed max_jump_height step_frequency character_height extra_jump_percent pixels_per_meter outputfilename"
