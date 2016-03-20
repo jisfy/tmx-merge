@@ -185,6 +185,24 @@ def build_grid(tilemap):
 
 	return grid
 
+
+def print_grid_trajectories(grid, tilemap, trajectories, character_size, output_filename):
+	image = Image.new("RGBA", get_image_size(tilemap))
+	image_draw = ImageDraw.Draw(image)
+
+	for row_index in sorted(grid.keys()):		
+		for col_index in sorted(grid[row_index].keys()):
+			grid_element = grid[row_index][col_index]
+			
+			# print "....... " + "row " + str(row_index) + " col " + str(col_index) + " Grid ->" + str(grid_element)
+			if (grid_element.element_type == "navpoint"):
+				print " ....... " + "row " + str(row_index) + " col " + str(col_index) + " links" + str(grid_element.links)
+			grid_element.draw(image_draw, (row_index, col_index), tilemap.tile_size)
+
+	draw_trajectories(image_draw, trajectories, character_size)
+	
+	image.save(output_filename, 'PNG', transparency=0)
+
 def print_grid(grid, tilemap, output_filename):
 	image = Image.new("RGBA", get_image_size(tilemap))
 	image_draw = ImageDraw.Draw(image)
@@ -204,7 +222,6 @@ def get_image_size(tilemap):
 	image_width = tilemap.size[0] * tilemap.tile_size[0]
 	image_height = tilemap.size[1] * tilemap.tile_size[1]
 	return (image_width, image_height)
-
 
 def add_border(grid, cell_position, id):
 	neighbor_row = cell_position[0] - 1
@@ -309,6 +326,52 @@ def add_projected_navpoints(tilemap, grid, first_navpoint_id):
 
 	return navpoint_id
 
+def get_horizontal_velocity(source_position, target_position, travel_time, tilesize, pixels_per_meter):
+	distance = (target_position[1] - source_position[1]) * tilesize[0] / pixels_per_meter
+	horizontal_velocity = distance / travel_time
+	# step_horizontal_velocity = horizontal_velocity / step_period
+	return horizontal_velocity
+
+def build_trajectory(grid, source_position, target_position, tilemap, jump_calculation_data):
+	obstacle_height_m = get_obstacle_height_m(source_position[0], target_position[0], tilemap, jump_calculation_data)
+	#jump_falling_height = get_jump_and_falling_height_for_obstacle(obstacle_height_m, jump_calculation_data.character_size[1], jump_calculation_data.extra_jump_percent)
+	jump_falling_height = get_jump_and_falling_height_for_obstacle(obstacle_height_m, 0, jump_calculation_data.extra_jump_percent)
+	jump_velocity = get_vertical_velocity(jump_falling_height[0], jump_calculation_data.get_step_period(), jump_calculation_data.get_step_world_gravity())
+	step_jump_velocity = jump_calculation_data.get_step_period() * jump_velocity
+	max_height_time = get_max_height_time(jump_calculation_data.get_step_world_gravity(), step_jump_velocity)
+	#falling_time = get_falling_time_til_obstacle(jump_calculation_data.get_step_world_gravity(), step_jump_velocity, jump_falling_height[1])
+	total_falling_time = get_falling_time_til_obstacle(jump_calculation_data.get_step_world_gravity(), step_jump_velocity, obstacle_height_m)
+	#total_time = int(math.ceil(max_height_time + falling_time)) 
+	total_time = int(math.ceil(total_falling_time)) 
+	print " ..... total time %s, v %s, %s, falling_time %s, jump_falling_height %s" % (str(total_time), str(jump_velocity), str(max_height_time), str(total_falling_time), str(jump_falling_height))
+
+	step_n_width = 0
+	step_n_height = 0
+	step_horizontal_velocity = get_horizontal_velocity(source_position, target_position, total_time, tilemap.tile_size, jump_calculation_data.pixels_per_meter)
+	#navpoint_position_n_px = (((source_position[1]  + 0.5) * tilemap.tile_size[0]) - step_n_width, ((source_position[0] + 0.5) * tilemap.tile_size[1]) - step_n_height)
+	navpoint_position_n_px = (((source_position[1] + 0.5) * tilemap.tile_size[0]) + step_n_width, ((source_position[0] + 1) * tilemap.tile_size[1]) - step_n_height)	
+	trajectory = [navpoint_position_n_px]
+	
+	print "########  source position %s, target position %s, step_n_width %s, trajectory_pos %s" % (str(source_position), str(target_position), str(step_n_width), str(navpoint_position_n_px))
+	#for n in range(int(max_height_time + 1)):
+	#for n in range(total_time + 1):
+	for n in range(total_time):
+		#step_n_height = step_n_height + step_jump_velocity * n + gravity_term
+		step_n_height = step_jump_velocity * n + ((n * n) + n) * jump_calculation_data.get_step_world_gravity()[1] / 2
+	#	print "~~~~~~~~~~~~~~~~ step_n_height %s, velocity up %s, total time %s, step_horizontal_velocity %s" % (str(step_n_height), str(step_jump_velocity), str(max_height_time), str(step_horizontal_velocity))
+		#step_n_width = step_n_width + (n * jump_calculation_data.get_step_walk())
+		# step_n_width = (n * jump_calculation_data.get_step_walk())
+		step_n_width = (n * step_horizontal_velocity)
+		step_n_height_px = step_n_height * jump_calculation_data.pixels_per_meter
+		step_n_width_px = step_n_width * jump_calculation_data.pixels_per_meter		
+		#navpoint_position_n_px = (((source_position[1]  + 0.5) * tilemap.tile_size[0]) + step_n_width_px, ((source_position[0] + 0.5) * tilemap.tile_size[1]) - step_n_height_px)		
+		#navpoint_position_n_px = (((source_position[1] + 0.5) * tilemap.tile_size[0]) + step_n_width_px, ((source_position[0]) * tilemap.tile_size[1]) - step_n_height_px)
+		navpoint_position_n_px = (((source_position[1] + 0.5) * tilemap.tile_size[0]) + step_n_width_px, ((source_position[0] + 1) * tilemap.tile_size[1]) - step_n_height_px)
+		print "########  source position %s, target position %s, step_n_width %s, trajectory_pos %s" % (str(source_position), str(target_position), str(step_n_width), str(navpoint_position_n_px))
+		trajectory.append(navpoint_position_n_px)
+		
+	return trajectory
+
 def find_jump_candidates(grid, source_position, tilemap, jump_calculation_data):
 	projections_found = []
 	for horizontal_distance in range(1, jump_calculation_data.max_jump_horizontal_tiles):
@@ -321,6 +384,7 @@ def find_jump_candidates(grid, source_position, tilemap, jump_calculation_data):
 	
 def add_projected_navpoints_new(tilemap, grid, first_navpoint_id, jump_calculation_data):
 	navpoint_id = first_navpoint_id
+	candidate_trajectories = []
 	for col_index in range(tilemap.size[0]):
 		left_projection_added = False
 		right_projection_added = False
@@ -341,6 +405,8 @@ def add_projected_navpoints_new(tilemap, grid, first_navpoint_id, jump_calculati
 				# print " should have right r:" + str(row_index) + ", c:" + str(col_index) + ",p:" + str(projection_found)				
 				for projection_candidate in projection_found:					
 						navpoint_candidate = NavPoint(navpoint_id, projection_candidate)
+						candidate_trajectory = build_trajectory(grid, projection_candidate, (row_index - 1, col_index), tilemap, jump_calculation_data)
+						candidate_trajectories.append(candidate_trajectory)
 						navpoint_candidate.is_corrected = True
 						grid[projection_candidate[0]][projection_candidate[1]] = navpoint_candidate
 						navpoint_id +=1
@@ -349,7 +415,7 @@ def add_projected_navpoints_new(tilemap, grid, first_navpoint_id, jump_calculati
 			if (left_projection_added and right_projection_added):
 				break
 
-	return navpoint_id
+	return (navpoint_id, candidate_trajectories)
 
 def add_navpoints(tilemap, grid):
 	navpoint_id = 0
@@ -471,6 +537,27 @@ def add_vertical_navpoint_links(grid, tilemap, jump_calculation_data):
 			navpoint_exists = (row_index in grid) and (col_index in grid[row_index]) and (grid[row_index][col_index].element_type == "navpoint")
 			if (navpoint_exists):
 				add_vertical_link_to_neighbors(grid, (row_index, col_index), tilemap, jump_calculation_data)
+								
+def draw_trajectories(image_draw, trajectories, character_size):
+		for trajectory in trajectories:
+			for trajectory_point in trajectory:				
+				# navpoint_rect_size = (20, 20)
+				navpoint_rect_size = character_size
+				# navpoint_rect_left = trajectory_point[0] - (navpoint_rect_size[0] / 2) 
+				# navpoint_rect_left = trajectory_point[0] + (navpoint_rect_size[0] / 2) 
+				# navpoint_rect_top = trajectory_point[1] - (navpoint_rect_size[1] / 2) 
+				# navpoint_rect_right = navpoint_rect_left + navpoint_rect_size[0]
+				# navpoint_rect_bottom = navpoint_rect_top + navpoint_rect_size[1]
+				# print "- drawing NavPoint " + str(navpoint_rect_left) + " , " + str(navpoint_rect_top)
+								
+				navpoint_rect_left = trajectory_point[0] - (navpoint_rect_size[0] / 2) 
+				navpoint_rect_bottom = trajectory_point[1]
+				navpoint_rect_top = navpoint_rect_bottom - navpoint_rect_size[1] 
+				navpoint_rect_right = navpoint_rect_left + navpoint_rect_size[0]
+				
+				
+				image_draw.rectangle([(navpoint_rect_left, navpoint_rect_top), (navpoint_rect_right, navpoint_rect_bottom)], outline="red")
+
 	
 ####
 ####              JUMP VELOCITY AND HEIGHT LOGIC
@@ -518,8 +605,10 @@ def get_falling_time_til_obstacle(world_gravity_step, vertical_velocity_step, fa
 	quadratic_solution1 = (-b - square) / (2 * a)
 	quadratic_solution2 = (-b + square) / (2 * a)	
 
+	print "================== qs1 %s, qs2 %s" % (str(quadratic_solution1), str(quadratic_solution2))
 	one_solution_negative = ((quadratic_solution1 < 0) | (quadratic_solution2 < 0))
-	solution = min(quadratic_solution1, quadratic_solution2)
+	#solution = min(quadratic_solution1, quadratic_solution2)
+	solution = max(quadratic_solution1, quadratic_solution2)
 	if (one_solution_negative):
 		solution = max(quadratic_solution1, quadratic_solution2)
 
@@ -532,13 +621,13 @@ def get_distance_travelled_horizontally(step_velocity_horizontal, raising_time, 
 	return distance_traveled_horizontally
 
 def get_maximum_distance_horizontal(max_jump_height, step_period, step_walk_speed, step_world_gravity):
-    velocity_to_maximum_height = get_vertical_velocity(max_jump_height, step_period, step_world_gravity)
-    time_to_maximum_height = get_max_height_time(step_world_gravity, step_period * velocity_to_maximum_height)
-    maximum_horizontal_distance = step_walk_speed * time_to_maximum_height
-
-    print "velocity_to_max_height %s, time_to_max_height %s, max_horizontal_distance %s" % (str(velocity_to_maximum_height), str(time_to_maximum_height), str(maximum_horizontal_distance))
-    
-    return maximum_horizontal_distance
+ 	velocity_to_maximum_height = get_vertical_velocity(max_jump_height, step_period, step_world_gravity)
+	step_velocity = step_period * velocity_to_maximum_height
+	time_to_maximum_height = get_max_height_time(step_world_gravity, step_velocity)
+	maximum_horizontal_distance = step_walk_speed * time_to_maximum_height
+	print "velocity_to_max_height %s, time_to_max_height %s, max_horizontal_distance %s, max_jump_height %s, step_velocity %s, step_world_gravity %s" % (str(velocity_to_maximum_height), str(time_to_maximum_height), str(maximum_horizontal_distance), str(max_jump_height), str(step_velocity), str(step_world_gravity))
+	
+	return maximum_horizontal_distance
 
 def get_maximum_tiles_horizontal(max_jump_height, step_period, step_walk_speed, step_world_gravity, tilesize, pixels_per_meter):
     maximum_horizontal_distance = get_maximum_distance_horizontal(max_jump_height, step_period, step_walk_speed, step_world_gravity)
@@ -583,9 +672,11 @@ jump_calculation_data.max_jump_horizontal_tiles = get_maximum_tiles_horizontal(m
 
 grid = build_grid(tilemap)
 last_navpoint_id = add_navpoints(tilemap, grid)
-add_projected_navpoints_new(tilemap, grid, last_navpoint_id, jump_calculation_data)
+last_navpoint_id_trajectories = add_projected_navpoints_new(tilemap, grid, last_navpoint_id, jump_calculation_data)
 
 #add_projected_navpoints(tilemap, grid, last_navpoint_id)
 #add_horizontal_navpoint_links(grid, tilemap, walk_speed)
 #add_vertical_navpoint_links(grid, tilemap, jump_calculation_data)
-print_grid(grid, tilemap, output_filename)
+#print_grid(grid, tilemap, output_filename)
+character_size_px = (character_size[0] * pixels_per_meter, character_size[1] * pixels_per_meter)
+print_grid_trajectories(grid, tilemap, last_navpoint_id_trajectories[1], character_size_px, output_filename)
