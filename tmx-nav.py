@@ -91,7 +91,9 @@ class NavPoint(GridElement):
 		self.id = id
 		self.position_tile = position_tile
 		self.is_corrected = False
+		self.correction_px = (0, 0)
 		self.links = {}
+		self.navpoint_colors = { True : 'green', False : 'blue'}
 
 	def set_position(self, position):
 		self.position_tile = position
@@ -100,11 +102,20 @@ class NavPoint(GridElement):
 	def get_position(self):
 		return self.position_tile
 
+	def get_correction(self):
+		return self.correction_px
+
+	def add_correction(self, correction_px):
+		self.correction_px = correction_px
+		self.is_corrected = True
+		print "~~~~ Added correction " + str(correction_px)
+
 	def add_link(self, target_navpoint, navtype, horizontal_speed, vertical_speed):
 		self.links[target_navpoint.id] = NavLink(target_navpoint, navtype, horizontal_speed, vertical_speed)
 
 	def draw(self, image_draw, position, tile_size):
-		navpoint_center_x = (position[1] * tile_size[0]) + (tile_size[0] / 2)
+		navpoint_center_x = (position[1] * tile_size[0]) + self.get_correction()[1] + (tile_size[0] / 2)
+		#navpoint_center_x = (position[1] * tile_size[0]) + (tile_size[0] / 2)
 		navpoint_center_y = (position[0] * tile_size[1]) + (tile_size[1] / 2)
 		navpoint_rect_size = (20, 20)
 		navpoint_rect_left = navpoint_center_x - (navpoint_rect_size[0] / 2) 
@@ -112,7 +123,9 @@ class NavPoint(GridElement):
 		navpoint_rect_right = navpoint_rect_left + navpoint_rect_size[0]
 		navpoint_rect_bottom = navpoint_rect_top + navpoint_rect_size[1]
 		# print "- drawing NavPoint " + str(navpoint_rect_left) + " , " + str(navpoint_rect_top)
-		image_draw.rectangle([(navpoint_rect_left, navpoint_rect_top), (navpoint_rect_right, navpoint_rect_bottom)], outline="blue", fill="blue")
+
+		navpoint_color = self.navpoint_colors[self.is_corrected]
+		image_draw.rectangle([(navpoint_rect_left, navpoint_rect_top), (navpoint_rect_right, navpoint_rect_bottom)], outline="blue", fill=navpoint_color)
 
 	        id_text_size = image_draw.textsize(str(self.id))
 		text_left = navpoint_center_x - (id_text_size[0] / 2)
@@ -315,13 +328,23 @@ def get_obstacle_height_m(bottom_position_row, obstacle_position_row, tilemap, j
 	print "... obs height m " + str(obstacle_height_m) + " ... obs height tiles " + str(obstacle_height_tiles) + " ... obs height px " + str(obstacle_height_px)
 	return obstacle_height_m
 
-def correct_navpoint_position(vertical_velocity, jump_and_falling_height, jump_calculation_data):
+def correct_navpoint_position(vertical_velocity, jump_and_falling_height, jump_calculation_data, source_navpoint, target_navpoint):
 	step_velocity = jump_calculation_data.get_step_period() * vertical_velocity
 	time_to_max_height = get_max_height_time(jump_calculation_data.get_step_world_gravity(), step_velocity)
 
-#	falling_time_til_obstacle = get_falling_time_til_obstacle(jump_calculation_data.get_step_world_gravity(), step_velocity, jump_and_falling_height[1])
-	falling_time_til_obstacle = get_falling_time_til_obstacle(jump_calculation_data.get_step_world_gravity(), step_velocity, jump_and_falling_height[0])
+	falling_time_til_obstacle = get_falling_time_til_obstacle(jump_calculation_data.get_step_world_gravity(), step_velocity, jump_and_falling_height[1])
+	#falling_time_til_obstacle = get_falling_time_til_obstacle(jump_calculation_data.get_step_world_gravity(), step_velocity, jump_and_falling_height[0])
 	distance_traveled_horizontally = get_distance_travelled_horizontally(jump_calculation_data.get_step_walk(), time_to_max_height, falling_time_til_obstacle)
+
+	current_distance_between_navpoints = abs(target_navpoint.get_position()[1] - source_navpoint.get_position()[1])
+	if (distance_traveled_horizontally > current_distance_between_navpoints):
+		# maybe add a percentage here 
+		distance_difference = current_distance_between_navpoints - distance_traveled_horizontally
+		half_distance_difference = distance_difference / 2.0
+		updated_source_position = source_navpoint.get_position()[1]
+		source_navpoint.add_correction((0, distance_difference * jump_calculation_data.pixels_per_meter))
+		# target_navpoint.add_correction((0, -half_distance_difference * jump_calculation_data.pixels_per_meter))
+
 	print "~~~~~~~ Distance Traveled " + str(distance_traveled_horizontally)
 
 def add_vertical_link_walk_up(grid, source_navpoint_position, tilemap, jump_calculation_data):
@@ -341,7 +364,7 @@ def add_vertical_link_walk_up(grid, source_navpoint_position, tilemap, jump_calc
 					#jump link
 					jump_velocity = get_vertical_velocity(jump_falling_height[0], jump_calculation_data.get_step_period(), jump_calculation_data.get_step_world_gravity())
 					print "~~~~~~~ Jump " + str(jump_velocity)
-					correct_navpoint_position(jump_velocity, jump_falling_height, jump_calculation_data)
+					correct_navpoint_position(jump_velocity, jump_falling_height, jump_calculation_data, grid[source_navpoint_position[0]][source_navpoint_position[1]], grid[row_index][neighbor_col_index])
 					grid[source_navpoint_position[0]][source_navpoint_position[1]].add_link(grid[row_index][neighbor_col_index], "jump", 0, jump_velocity)
 				grid[row_index][neighbor_col_index].add_link(grid[source_navpoint_position[0]][source_navpoint_position[1]], "fall", jump_calculation_data.walk_speed, 0)
 			

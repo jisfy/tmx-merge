@@ -68,10 +68,11 @@ class Platform:
 		
 class NavLink:
 
-	def __init__(self, target_navpoint, horizontal_speed, vertical_speed):
+	def __init__(self, target_navpoint, navtype, horizontal_speed, vertical_speed):
 		self.target_navpoint = target_navpoint
 		self.vertical_speed = None
 		self.horizontal_speed = None
+		self.navtype = navtype
 
 	def set_horizontal_speed(self, horizontal_speed):
 		self.horizontal_speed = horizontal_speed
@@ -90,16 +91,24 @@ class NavPoint:
 		self.position_tile = position_tile
 		self.is_corrected = False
 		self.links = {}
+		self.can_walk_left = False
+		self.can_walk_right = False
 
 	def set_position(self, position):
 		self.position_tile = position
 		self.is_corrected = True
 
+	def set_can_walk_left(can_walk_left):
+		self.can_walk_left = can_walk_left
+
+	def set_can_walk_right(can_walk_right):
+		self.can_walk_right = can_walk_right
+
 	def get_position(self):
 		return self.position_tile
 
-	def add_link(self, target_navpoint, horizontal_speed, vertical_speed):
-		self.links[target_navpoint.id] = NavLink(target_navpoint, horizontal_speed, vertical_speed)
+	def add_link(self, target_navpoint, navtype, horizontal_speed, vertical_speed):
+		self.links[target_navpoint.id] = NavLink(target_navpoint, navtype, horizontal_speed, vertical_speed)
 
 	def __repr__(self):
 		repr = "{id : " + str(self.id) + ";pos: " + str(self.position_tile) + ";links: " + str(self.links) + "}\n" 
@@ -295,6 +304,52 @@ def get_navpoints(tilemap, platforms):
 	sorted_navpoints = sorted(navpoints, key = lambda navpoint: navpoint[0])
 	return sorted_navpoints
 
+def get_navpoints_new(tilemap, platforms):
+	navpoints = {}
+	index = 0
+	for platform in platforms.values():
+		added_border = 0
+		navpoint_border_left = None
+		navpoint_border_right = None
+		if ((platform.left == None) & (platform.get_map_object().pos[0] != 0)):
+			# check if the platform is on the left screen border
+
+			projected_point = get_projection_left(platform, platforms)
+			navpoint_projected = NavPoint(index, projected_point)
+			navpoints[index] = navpoint_projected
+			index +=1
+
+			border_point = get_border_left(platform, platforms)
+			if border_point != None:
+				navpoint_border_left = NavPoint(index, border_point)
+				navpoints[index] = navpoint_border_left
+				navpoint_border_left.add_link(navpoint_projected, "walk", -3, 0)
+				index +=1
+				added_border +=1
+
+
+		if ((platform.right == None) & (platform.get_map_object().pos[0] + platform.get_map_object().size[0] != tilemap.size[0])):
+			# check if the platform is on the right screen border
+
+			projected_point = get_projection_right(platform, platforms)
+			navpoint_projected = NavPoint(index, projected_point)
+			navpoints[index] = navpoint_projected
+			index +=1
+			
+			border_point = get_border_right(platform, platforms)
+			if border_point != None:
+				navpoint_border_right = NavPoint(index, border_point)
+				navpoints[index] = navpoint_border_right
+				navpoint_border_right.add_link(navpoint_projected, "walk", 3, 0)
+				index +=1
+				added_border +=1
+
+		if (added_border == 2):
+			navpoint_border_left.add_link(navpoint_border_right, "walk", 3, 0)
+			navpoint_border_right.add_link(navpoint_border_left, "walk", -3, 0)
+
+	return navpoints
+
 def get_vertical_velocity(desired_height, step_period, world_gravity_step):
 	if (desired_height <= 0):
 		return 0 # wanna go down? just let it drop
@@ -428,7 +483,8 @@ distance_traveled_horizontally = get_distance_travelled_horizontally(step_veloci
 
 print "-----  vertical velocity for height " + str(jump_height) + ", " + str(vertical_velocity_m_s) + " raising time " + str(time_to_max_height) + " falling time " + str(falling_time_til_obstacle) + " ... " + str(distance_traveled_horizontally)
 
-navpoint_graph = get_navpoint_graph(navpoints, MAXIMUM_JUMP_HEIGHT)
+# navpoint_graph = get_navpoint_graph(navpoints, MAXIMUM_JUMP_HEIGHT)
+navpoint_graph = get_navpoints_new(tilemap, platforms)
 print_image(platforms, tilemap, navpoint_graph.values())
 print "Navpoint Graph " + str(navpoint_graph)
 # platform = Platform(1, tilemap.layers['physics'].all_objects()[1])
