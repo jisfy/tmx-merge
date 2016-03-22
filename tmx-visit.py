@@ -59,7 +59,6 @@ class Trajectory:
 			box = self.get_bounding_box(point, navpoint_rect_size)
 			image_draw.rectangle(box, outline="red")
 
-
 class JumpCalculationData:
 	
 	def __init__(self, character_size, step_frequency, extra_jump_percent, walk_speed, world_gravity, max_jump_height, pixels_per_meter):
@@ -147,7 +146,7 @@ class PlatformElement(GridElement):
 		box = self.get_box(position, tile_size)
 		image_draw.rectangle(box , fill="white", outline="blue")
 
-	        id_text_size = image_draw.textsize(str(self.id))
+		id_text_size = image_draw.textsize(str(self.id))
 		text_left = box[0][0] + ((tile_size[0] / 2) - (id_text_size[0] / 2))
 		text_top = box[0][1] + ((tile_size[1] / 2) - (id_text_size[1] / 2))
 		image_draw.text((text_left, text_top), str(self.id), fill="black")
@@ -207,6 +206,16 @@ class NavPoint(GridElement):
 	def __repr__(self):
 		repr = "{id : " + str(self.id) + ";pos: " + str(self.position_tile) + ";links: " + str(self.links) + "}\n" 
 		return repr
+	
+class Platform:
+	
+	def __init__(self, id, position):
+		self.id = id
+		self.position = position
+		self.navpoints = []
+		
+	def add_navpoint(self, navpoint):
+		self.navpoints.append(navpoint)
 
 def get_target_tilemap_filename(tilemap_path, target_tilemap_path):
 	target_tilemap_filename = os.path.join(target_tilemap_path, os.path.basename(tilemap_path))
@@ -229,6 +238,14 @@ class AutoVivification(dict):
         except KeyError:
             value = self[item] = type(self)()
             return value
+				
+def update_tilemap_platforms(tilemap, updated_tilemap_filename):		
+	objects_layer = tilemap.layers['physics']
+	platform_id = 0
+	for object in objects_layer.all_objects():
+		object.properties['platform_id'] = str(platform_id)
+		platform_id += 1
+	tilemap.save(updated_tilemap_filename)
 
 def build_grid(tilemap):
 	objects_layer = tilemap.layers['physics']
@@ -530,34 +547,6 @@ def get_obstacle_height_m(bottom_position_row, obstacle_position_row, tilemap, j
 	obstacle_height_m = obstacle_height_px / jump_calculation_data.pixels_per_meter
 	print "... obs height m " + str(obstacle_height_m) + " ... obs height tiles " + str(obstacle_height_tiles) + " ... obs height px " + str(obstacle_height_px)
 	return obstacle_height_m
-					
-def add_vertical_link_walk_down(grid, source_navpoint_position, tilemap, jump_calculation_data):
-	neighbor_col_index = source_navpoint_position[1] + 1
-	if (source_navpoint_position[0] + 1 <= tilemap.size[1]):
-		for row_index in range(source_navpoint_position[0] + 1, tilemap.size[1]):
-			right_down_blank = not((row_index in grid) and (neighbor_col_index in grid[row_index]))
-			right_down_navpoint = not(right_down_blank) and (grid[row_index][neighbor_col_index].element_type == "navpoint")	
-			right_down_platform = not(right_down_blank) and (grid[row_index][neighbor_col_index].element_type == "platform")
-
-			if right_down_platform:
-				break # check my own column, if there is a platform, maybe I can't jump
-			elif right_down_navpoint:
-				obstacle_height_m = get_obstacle_height_m(row_index, source_navpoint_position[0], tilemap, jump_calculation_data)
-				jump_falling_height = get_jump_and_falling_height_for_obstacle(obstacle_height_m, jump_calculation_data.character_size[1], jump_calculation_data.extra_jump_percent)			
-				if (jump_falling_height[0] <= jump_calculation_data.max_jump_height):				
-					jump_velocity = get_vertical_velocity(jump_falling_height[0], jump_calculation_data.get_step_period(), jump_calculation_data.get_step_world_gravity())
-					grid[row_index][neighbor_col_index].add_link(grid[source_navpoint_position[0]][source_navpoint_position[1]], "jump", 0, jump_velocity)
-				grid[source_navpoint_position[0]][source_navpoint_position[1]].add_link(grid[row_index][neighbor_col_index], "fall", jump_calculation_data.walk_speed, 0)	
-
-def add_vertical_link_to_neighbors(grid, source_navpoint_position, tilemap, jump_calculation_data):
-	add_vertical_link_walk_down(grid, source_navpoint_position, tilemap, jump_calculation_data)
-
-def add_vertical_navpoint_links(grid, tilemap, jump_calculation_data):
-	for col_index in range(tilemap.size[0]):
-		for row_index in range(tilemap.size[1]):
-			navpoint_exists = (row_index in grid) and (col_index in grid[row_index]) and (grid[row_index][col_index].element_type == "navpoint")
-			if (navpoint_exists):
-				add_vertical_link_to_neighbors(grid, (row_index, col_index), tilemap, jump_calculation_data)
 								
 def draw_trajectories(image_draw, trajectories, character_size, draw_collisions=True):
 		for trajectory in trajectories:
@@ -662,7 +651,8 @@ step_frequency = int(sys.argv[4])
 character_size = (float(sys.argv[5]), float(sys.argv[6]))
 extra_jump_percent = int(sys.argv[7])
 pixels_per_meter = float(sys.argv[8])
-output_filename = sys.argv[9]
+output_bitmap_filename = sys.argv[9]
+output_updated_tilemap = sys.argv[10]
 world_gravity_m_s_s = -9.8
 
 tilemap = get_tilemap(input_tilemap_filename)
@@ -673,6 +663,9 @@ jump_calculation_data = JumpCalculationData(character_size, step_frequency, extr
 jump_calculation_data.max_jump_horizontal_tiles = get_maximum_tiles_horizontal(max_jump_height, jump_calculation_data.get_step_period(), jump_calculation_data.get_step_walk(), jump_calculation_data.get_step_world_gravity(), tilemap.tile_size, jump_calculation_data.pixels_per_meter)
 
 grid = build_grid(tilemap)
+
+update_tilemap_platforms(tilemap, output_updated_tilemap)
+
 last_navpoint_id = add_navpoints(tilemap, grid)
 last_navpoint_id_trajectories = add_projected_jump_navpoints(tilemap, grid, last_navpoint_id, jump_calculation_data)
 last_navpoint_id_fall_paths = add_projected_fall_navpoints(tilemap, grid, last_navpoint_id_trajectories[0], jump_calculation_data)
@@ -683,4 +676,4 @@ add_horizontal_navpoint_links(grid, tilemap, walk_speed)
 #add_vertical_navpoint_links(grid, tilemap, jump_calculation_data)
 #print_grid(grid, tilemap, output_filename)
 character_size_px = (character_size[0] * pixels_per_meter, character_size[1] * pixels_per_meter)
-print_grid(grid, tilemap, last_navpoint_id_trajectories[1], character_size_px, output_filename)
+print_grid(grid, tilemap, last_navpoint_id_trajectories[1], character_size_px, output_bitmap_filename, with_trajectories=True)
