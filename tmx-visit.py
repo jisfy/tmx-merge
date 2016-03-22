@@ -2,6 +2,7 @@ import sys
 import tmxlib
 import math
 import os
+import json
 from PIL import Image, ImageDraw
 
 class Trajectory:
@@ -216,6 +217,21 @@ class Platform:
 		
 	def add_navpoint(self, navpoint):
 		self.navpoints.append(navpoint)
+	
+class GridEncoder(json.JSONEncoder):
+	
+	def default(self, obj):
+		if isinstance(obj, Platform):
+			a_copy = dict(obj.__dict__)
+			return a_copy
+		if isinstance(obj, NavPoint):
+			a_navpoint = {'id': obj.id,'position_tile': obj.position_tile, 'links': obj.links}
+			return a_navpoint
+		if isinstance(obj, NavLink):
+			a_link = {'target_id' : obj.target_navpoint.id, 'horizontal_speed' : obj.horizontal_speed, 'vertical_speed' : obj.vertical_speed, 'link_type': obj.navtype}
+			return a_link
+		json.JSONEncoder.default(self, obj)
+		
 
 def get_target_tilemap_filename(tilemap_path, target_tilemap_path):
 	target_tilemap_filename = os.path.join(target_tilemap_path, os.path.basename(tilemap_path))
@@ -260,6 +276,28 @@ def build_grid(tilemap):
 		platform_id += 1
 
 	return grid
+
+def build_platforms_from_grid(grid):
+	platforms = {}
+	for row_index in sorted(grid.keys()):		
+		for col_index in sorted(grid[row_index].keys()):
+			cell_exists = (row_index in grid) and (col_index in grid[row_index])
+			cell_is_platform = cell_exists and (grid[row_index][col_index].element_type == "platform")
+			cell_is_navpoint = cell_exists and (grid[row_index][col_index].element_type == "navpoint")
+			cell_below_exists = ((row_index + 1) in grid) and (col_index in grid[row_index + 1])
+			cell_below_is_platform = cell_below_exists and (grid[row_index + 1][col_index].element_type == "platform")
+			
+			if (cell_is_platform and not(grid[row_index][col_index].id in platforms.keys())):
+				platform_position = grid[row_index][col_index].mapobject.pos
+				platforms[grid[row_index][col_index].id] = Platform(grid[row_index][col_index].id, platform_position)
+			elif (cell_below_is_platform and not(grid[row_index + 1][col_index].id in platforms.keys())):
+				  platform_position = grid[row_index + 1][col_index].mapobject.pos
+				  platforms[grid[row_index + 1][col_index].id] = Platform(grid[row_index + 1][col_index].id, platform_position)
+			
+			if (cell_is_navpoint and cell_below_is_platform):
+				  platforms[grid[row_index + 1][col_index].id].add_navpoint(grid[row_index][col_index])
+
+	return platforms
 
 def print_grid(grid, tilemap, trajectories, character_size, output_filename, with_trajectories = False, with_collisions = False):
 	image = Image.new("RGBA", get_image_size(tilemap))
@@ -677,3 +715,10 @@ add_horizontal_navpoint_links(grid, tilemap, walk_speed)
 #print_grid(grid, tilemap, output_filename)
 character_size_px = (character_size[0] * pixels_per_meter, character_size[1] * pixels_per_meter)
 print_grid(grid, tilemap, last_navpoint_id_trajectories[1], character_size_px, output_bitmap_filename, with_trajectories=True)
+
+platforms = build_platforms_from_grid(grid)
+#platform = Platform(1, (1, 10))
+#navpoint = grid[10][60]
+#platform.add_navpoint(navpoint)
+#print " json dump %s " % json.dumps(navpoint, cls = GridEncoder, sort_keys= False)
+print " json dump %s " % json.dumps(platforms, cls = GridEncoder, sort_keys= True, indent = 5)
