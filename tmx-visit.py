@@ -178,10 +178,7 @@ class NavPoint(GridElement):
 		self.is_corrected = True
 
 	def add_link(self, target_navpoint, navtype, horizontal_speed, vertical_speed):
-		if (target_navpoint.id in self.links):
-			self.links[target_navpoint.id].append(NavLink(target_navpoint, navtype, horizontal_speed, vertical_speed))
-		else:
-			self.links[target_navpoint.id] = [NavLink(target_navpoint, navtype, horizontal_speed, vertical_speed)]
+		self.links[target_navpoint.id] = NavLink(target_navpoint, navtype, horizontal_speed, vertical_speed)
 
 	def draw(self, image_draw, position, tile_size):
 		navpoint_center_x = (position[1] * tile_size[0]) + self.get_correction()[1] + (tile_size[0] / 2)
@@ -200,9 +197,8 @@ class NavPoint(GridElement):
 		text_top = navpoint_center_y - (id_text_size[1] / 2)
 		image_draw.text((text_left, text_top), str(self.id), fill="white")
 
-		for navpoint_link_group in self.links.values():
-			for navpoint_link in navpoint_link_group:
-				navpoint_link.draw(image_draw, (navpoint_center_x, navpoint_center_y), tile_size)
+		for navpoint_link in self.links.values():
+			navpoint_link.draw(image_draw, (navpoint_center_x, navpoint_center_y), tile_size)
 
 	def __repr__(self):
 		repr = "{id : " + str(self.id) + ";pos: " + str(self.position_tile) + ";links: " + str(self.links) + "}\n" 
@@ -232,7 +228,6 @@ class GridEncoder(json.JSONEncoder):
 			return a_link
 		json.JSONEncoder.default(self, obj)
 		
-
 def get_target_tilemap_filename(tilemap_path, target_tilemap_path):
 	target_tilemap_filename = os.path.join(target_tilemap_path, os.path.basename(tilemap_path))
 	return target_tilemap_filename
@@ -691,6 +686,7 @@ extra_jump_percent = int(sys.argv[7])
 pixels_per_meter = float(sys.argv[8])
 output_bitmap_filename = sys.argv[9]
 output_updated_tilemap = sys.argv[10]
+output_export_json_filename = sys.argv[11]
 world_gravity_m_s_s = -9.8
 
 tilemap = get_tilemap(input_tilemap_filename)
@@ -721,4 +717,8 @@ platforms = build_platforms_from_grid(grid)
 #navpoint = grid[10][60]
 #platform.add_navpoint(navpoint)
 #print " json dump %s " % json.dumps(navpoint, cls = GridEncoder, sort_keys= False)
-print " json dump %s " % json.dumps(platforms, cls = GridEncoder, sort_keys= True, indent = 5)
+#print " json dump %s " % json.dumps(platforms, cls = GridEncoder, sort_keys= True, indent = 5)
+
+export_json_file = open(output_export_json_filename, 'wb')
+export_json_file.write(json.dumps(platforms, cls = GridEncoder, sort_keys= True, indent = 5))
+export_json_file.close()
