@@ -188,7 +188,10 @@ class NavPoint(GridElement):
 		navpoint_rect_top = navpoint_center_y - (navpoint_rect_size[1] / 2) 
 		navpoint_rect_right = navpoint_rect_left + navpoint_rect_size[0]
 		navpoint_rect_bottom = navpoint_rect_top + navpoint_rect_size[1]
-
+		
+		for navpoint_link in self.links.values():
+			navpoint_link.draw(image_draw, (navpoint_center_x, navpoint_center_y), tile_size)
+			
 		navpoint_color = self.navpoint_colors[self.is_corrected]
 		image_draw.rectangle([(navpoint_rect_left, navpoint_rect_top), (navpoint_rect_right, navpoint_rect_bottom)], outline="blue", fill=navpoint_color)
 
@@ -197,8 +200,6 @@ class NavPoint(GridElement):
 		text_top = navpoint_center_y - (id_text_size[1] / 2)
 		image_draw.text((text_left, text_top), str(self.id), fill="white")
 
-		for navpoint_link in self.links.values():
-			navpoint_link.draw(image_draw, (navpoint_center_x, navpoint_center_y), tile_size)
 
 	def __repr__(self):
 		repr = "{id : " + str(self.id) + ";pos: " + str(self.position_tile) + ";links: " + str(self.links) + "}\n" 
