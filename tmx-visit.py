@@ -336,6 +336,30 @@ def is_last_platform_element(grid, cell_position):
 	same_on_the_right = is_platform and is_next_platform and (grid[cell_position[0]][cell_position[1]].id == grid[cell_position[0]][cell_position[1] + 1].id)
 	return (not(same_on_the_right))
 
+def are_neighbors_taken(grid, position, tilemap_size, character_size_tiles, sign):
+	are_neighbors_taken = False
+	for horizontal_offset in range(1, int(character_size_tiles[0]) + 1):
+		is_neighbor_taken = (position[0] in grid) and (position[1] + (sign * horizontal_offset) < tilemap_size[0]) and ((position[1] + (sign * horizontal_offset)) in grid[position[0]])
+		are_neighbors_taken = (are_neighbors_taken or is_neighbor_taken)
+	return are_neighbors_taken
+
+def are_right_neighbors_taken(grid, position, tilemap_size, character_size_tiles):
+	return are_neighbors_taken(grid, position, tilemap_size, character_size_tiles, 1)
+
+def are_left_neighbors_taken(grid, position, tilemap_size, character_size_tiles):
+	return are_neighbors_taken(grid, position, tilemap_size, character_size_tiles, -1)
+
+def should_have_left_projection_with_character(grid, position, tilemap_size, character_width):
+	return should_have_projection_with_character(grid, position, tilemap_size, character_width, -1)
+
+def should_have_right_projection_with_character(grid, position, tilemap_size, character_width):
+	return should_have_projection_with_character(grid, position, tilemap_size, character_width, 1)
+	
+def should_have_projection_with_character(grid, position, tilemap_size, character_width, sign):
+	is_walkable = not(((position[0] - 1) in grid) and (position[1] in grid[position[0] - 1]) and (grid[position[0] - 1][position[1]].element_type == "platform")) and ((position[0] - 1) >= 0) 
+	neighbors_taken = are_neighbors_taken(grid, position, tilemap_size, character_width, sign)
+	return not(neighbors_taken) and is_walkable
+
 def should_have_right_projection(grid, position, tilemap_size):
 	is_walkable = not(((position[0] - 1) in grid) and (position[1] in grid[position[0] - 1]) and (grid[position[0] - 1][position[1]].element_type == "platform")) and ((position[0] - 1) >= 0) 
 	is_right_neighbor_taken = (position[0] in grid) and (position[1] + 1 < tilemap_size[0]) and ((position[1] + 1) in grid[position[0]])
@@ -345,6 +369,51 @@ def should_have_left_projection(grid, position, tilemap_size):
 	is_walkable = not(((position[0] - 1) in grid) and (position[1] in grid[position[0] - 1]) and (grid[position[0] - 1][position[1]].element_type == "platform")) and ((position[0] - 1) >= 0) 
 	is_left_neighbor_taken = (position[0] in grid) and (position[1] -1 > 0) and ((position[1] - 1) in grid[position[0]])
 	return not(is_left_neighbor_taken) and is_walkable
+
+def number_cells_are_platform(grid, position, size, sign):
+	number_platforms = 0
+	for offset in range(1, size +1):
+		cell_exists = (position[0] in grid) and ((position[1] + (sign * offset)) in grid[position[0]])
+		cell_is_platform = cell_exists and (grid[position[0]][position[1] + (sign * offset)].element_type == "platform")
+		number_platforms = (number_platforms + 1) if cell_is_platform else number_platforms
+
+	return number_platforms
+
+def find_projection_right_for_fall(grid, neighbor_position, tilemap, jump_calculation_data):
+	return find_projection_for_fall(grid, neighbor_position, tilemap, 1, jump_calculation_data)
+
+def find_projection_left_for_fall(grid, neighbor_position, tilemap, jump_calculation_data):
+	return find_projection_for_fall(grid, neighbor_position, tilemap, -1, jump_calculation_data)
+ 
+def find_projection_for_fall(grid, neighbor_position, tilemap, sign, jump_calculation_data):
+	## CODE DUPLICATION
+	projection = None
+	tilemap_size = tilemap.size
+	some_cell_on_way_down = False
+	character_size_tiles = get_character_size_tiles(tilemap.tile_size, jump_calculation_data.get_character_size_px())
+	tiles_to_center_navpoint = math.ceil((jump_calculation_data.get_character_size_px()[0] / (2.0 * tilemap.tile_size[0])) + 0.5)
+	total_tiles_character_width = tiles_to_center_navpoint + math.floor(jump_calculation_data.get_character_size_px()[0] / (2.0 * tilemap.tile_size[0]))
+	
+	for row_index in range(neighbor_position[0], tilemap_size[1] + 1):
+		# print "... checking for row index %s , %s" % (str(row_index), str(neighbor_position))
+		#cell_exists = (row_index in grid) and (neighbor_position[1] in grid[row_index])
+		#cell_is_platform = cell_exists and (grid[row_index][neighbor_position[1]].element_type == "platform")
+		number_cells_platform = number_cells_are_platform(grid, (row_index, neighbor_position[1]), int(total_tiles_character_width), sign)
+		cells_are_all_platform = (number_cells_platform >= character_size_tiles[0])
+		
+
+		one_up_row_index = row_index - 1
+		one_up_nav_point_col_index = (neighbor_position[1] + (sign * (tiles_to_center_navpoint -1)))
+		one_up_not_exists = (one_up_row_index > 0) and not((one_up_row_index in grid) and (one_up_nav_point_col_index in grid[one_up_row_index]) and (grid[one_up_row_index][one_up_nav_point_col_index].element_type != "navpoint"))
+
+		# print "...finding proj nr:" + str(neighbor_position[0]) + ",nc:" + str(neighbor_position[1]) + " cip " + str(cell_is_platform) + " oneuprow " + str(one_up_not_exists) + ".. one_up_rindex " + str(one_up_row_index)
+		if (cells_are_all_platform and one_up_not_exists and not(some_cell_on_way_down)):
+			projection = (one_up_row_index, one_up_nav_point_col_index)
+			break
+		
+		some_cell_on_way_down = some_cell_on_way_down or (number_cells_platform != 0)
+
+	return projection
 
 def find_projection(grid, neighbor_position, tilemap_size):
 	## CODE DUPLICATION
@@ -437,6 +506,9 @@ def find_jump_candidates(grid, source_position, tilemap, jump_calculation_data, 
 				projections_found.append(projection_found)
 				
 	return projections_found
+
+def get_character_size_tiles(tile_size, character_size_px):
+	return (character_size_px[0] / tile_size[0], character_size_px[1] / tile_size[1])
 	
 def add_projected_jump_navpoints(tilemap, grid, first_navpoint_id, jump_calculation_data):
 	navpoint_id = first_navpoint_id
@@ -487,7 +559,6 @@ def add_projected_jump_navpoints(tilemap, grid, first_navpoint_id, jump_calculat
 
 	return (navpoint_id, candidate_trajectories)
 
-
 def add_projected_fall_navpoints(tilemap, grid, first_navpoint_id, jump_calculation_data):
 	navpoint_id = first_navpoint_id
 	for col_index in range(tilemap.size[0]):
@@ -497,9 +568,9 @@ def add_projected_fall_navpoints(tilemap, grid, first_navpoint_id, jump_calculat
 			cell_exists = (row_index in grid) and (col_index in grid[row_index])
 			cell_is_platform = cell_exists and (grid[row_index][col_index].element_type == "platform")
 		
-			if (cell_is_platform) and (should_have_left_projection(grid, (row_index, col_index), tilemap.size)):				
+			if (cell_is_platform) and (should_have_left_projection_with_character(grid, (row_index, col_index), tilemap.size, get_character_size_tiles(tilemap.tile_size, jump_calculation_data.get_character_size_px()))):				
 				# print " should have left r:" + str(row_index) + ", c:" + str(col_index) + ",p:" + str(projection_found)
-				projection_candidate = find_projection(grid, (row_index, col_index - 1), tilemap.size)				
+				projection_candidate = find_projection_left_for_fall(grid, (row_index, col_index - 1), tilemap, jump_calculation_data)				
 				projection_is_navpoint = (projection_candidate != None) and (projection_candidate[0] in grid) and (projection_candidate[1] in grid[projection_candidate[0]]) and (grid[projection_candidate[0]][projection_candidate[1]].element_type == "navpoint")
 				projection_is_blank = (projection_candidate != None) and not(projection_is_navpoint)
 				one_up_navpoint = ((row_index - 1) in grid) and (col_index in grid[row_index - 1]) and (grid[row_index - 1][col_index].element_type == "navpoint") and ((row_index - 1) >= 0) 
@@ -513,8 +584,8 @@ def add_projected_fall_navpoints(tilemap, grid, first_navpoint_id, jump_calculat
 					grid[row_index - 1][col_index].add_link(grid[projection_candidate[0]][projection_candidate[1]], "fall", -jump_calculation_data.walk_speed, 0)
 					left_projection_added = True
 									
-			if (cell_is_platform) and (should_have_right_projection(grid, (row_index, col_index), tilemap.size)):	
-				projection_candidate = find_projection(grid, (row_index, col_index + 1), tilemap.size)				
+			if (cell_is_platform) and (should_have_right_projection_with_character(grid, (row_index, col_index), tilemap.size, get_character_size_tiles(tilemap.tile_size, jump_calculation_data.get_character_size_px()))):
+				projection_candidate = find_projection_right_for_fall(grid, (row_index, col_index + 1), tilemap, jump_calculation_data)					
 				projection_is_navpoint = (projection_candidate != None) and (projection_candidate[0] in grid) and (projection_candidate[1] in grid[projection_candidate[0]]) and (grid[projection_candidate[0]][projection_candidate[1]].element_type == "navpoint")
 				projection_is_blank = (projection_candidate != None) and not(projection_is_navpoint)
 				one_up_navpoint = ((row_index - 1) in grid) and (col_index in grid[row_index - 1]) and (grid[row_index - 1][col_index].element_type == "navpoint") and ((row_index - 1) >= 0) 
@@ -704,6 +775,7 @@ update_tilemap_platforms(tilemap, output_updated_tilemap)
 last_navpoint_id = add_navpoints(tilemap, grid)
 last_navpoint_id_trajectories = add_projected_jump_navpoints(tilemap, grid, last_navpoint_id, jump_calculation_data)
 last_navpoint_id_fall_paths = add_projected_fall_navpoints(tilemap, grid, last_navpoint_id_trajectories[0], jump_calculation_data)
+#last_navpoint_id_fall_paths = add_projected_fall_navpoints(tilemap, grid, last_navpoint_id, jump_calculation_data)
 add_horizontal_navpoint_links(grid, tilemap, walk_speed)
 
 #add_projected_navpoints(tilemap, grid, last_navpoint_id)
@@ -711,6 +783,8 @@ add_horizontal_navpoint_links(grid, tilemap, walk_speed)
 #add_vertical_navpoint_links(grid, tilemap, jump_calculation_data)
 #print_grid(grid, tilemap, output_filename)
 character_size_px = (character_size[0] * pixels_per_meter, character_size[1] * pixels_per_meter)
+
+#print_grid(grid, tilemap, [], character_size_px, output_bitmap_filename)
 print_grid(grid, tilemap, last_navpoint_id_trajectories[1], character_size_px, output_bitmap_filename, with_trajectories=True)
 
 platforms = build_platforms_from_grid(grid)
