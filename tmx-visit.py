@@ -362,12 +362,14 @@ def should_have_projection_with_character(grid, position, tilemap_size, characte
 
 def should_have_right_projection(grid, position, tilemap_size):
 	is_walkable = not(((position[0] - 1) in grid) and (position[1] in grid[position[0] - 1]) and (grid[position[0] - 1][position[1]].element_type == "platform")) and ((position[0] - 1) >= 0) 
-	is_right_neighbor_taken = (position[0] in grid) and (position[1] + 1 < tilemap_size[0]) and ((position[1] + 1) in grid[position[0]])
+	# is_right_neighbor_taken = (position[0] in grid) and (position[1] + 1 < tilemap_size[0]) and ((position[1] + 1) in grid[position[0]]) 
+	is_right_neighbor_taken = (position[0] in grid) and (position[1] + 1 < tilemap_size[0]) and ((position[1] + 1) in grid[position[0]]) and (grid[position[0]][position[1] + 1].element_type == "platform")
 	return not(is_right_neighbor_taken) and is_walkable
 
 def should_have_left_projection(grid, position, tilemap_size):
 	is_walkable = not(((position[0] - 1) in grid) and (position[1] in grid[position[0] - 1]) and (grid[position[0] - 1][position[1]].element_type == "platform")) and ((position[0] - 1) >= 0) 
-	is_left_neighbor_taken = (position[0] in grid) and (position[1] -1 > 0) and ((position[1] - 1) in grid[position[0]])
+	#is_left_neighbor_taken = (position[0] in grid) and (position[1] -1 > 0) and ((position[1] - 1) in grid[position[0]])
+	is_left_neighbor_taken = (position[0] in grid) and (position[1] -1 > 0) and ((position[1] - 1) in grid[position[0]]) and (grid[position[0]][position[1] - 1].element_type == "platform")
 	return not(is_left_neighbor_taken) and is_walkable
 
 def number_cells_are_platform(grid, position, size, sign):
