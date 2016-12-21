@@ -18,8 +18,7 @@ def get_cropped_tile_image_from_image(image, tile_size, top_left, top_left_offse
 	return croppedTile
 
 
-def get_cropped_tile_image(tile, tile_size, top_left_offset=(0,0)):
-#        print "==== get_cropped_tile_image " + str(tile_size) + " . " + str(tile)
+def get_cropped_tile_image_from_tile(tile, tile_size, top_left_offset=(0,0)):
 	tileImage = Image.open(tile.image.image.source)
 	return get_cropped_tile_image_from_image(tileImage, tile_size, tile.image.top_left, top_left_offset)
 
@@ -36,7 +35,7 @@ def shrink_and_crop(tileset):
 	for tile in tileset:
 		tile_id = tile.number + 1
           #      print "_________- tile size in shrink_and_crop " + str(tileset.tile_size)
-		croppedTile = get_cropped_tile_image(tile, tileset.tile_size)
+		croppedTile = get_cropped_tile_image_from_tile(tile, tileset.tile_size)
 
 		# only save the tile if it is not blank
 		if croppedTile.getbbox() :
@@ -59,7 +58,7 @@ def shrink_and_crop(tileset):
 
 	return (len(tilesAlreadyCropped), shrunk_tile_number_mapping, blank_tile_numbers)
 
-def get_texture_size_for_tileset_2(number_of_tiles, tile_size, tile_padding):
+def get_texture_size_for_tileset(number_of_tiles, tile_size, tile_padding):
         tile_size_with_padding = (tile_size[0] + (tile_padding[0] * 2), tile_size[1] + (tile_padding[1] * 2))
         total_pixels_for_tiles_with_padding = number_of_tiles * tile_size_with_padding[0] * tile_size_with_padding[1]
         total_pixels_for_tiles_square = int(math.ceil(math.sqrt(total_pixels_for_tiles_with_padding)))
@@ -97,31 +96,42 @@ def reduce_tilesets(tilesets, target_tilemap_path, shrink_results, target_tilese
 	target_tilemap_image.save(os.path.join(target_tilemap_path, original_tileset_image_source))
 	return reduced_tileset_mappings
 
-def augment_image(source_tile, tile_size, tile_padding, output_image):
-        cropped_tile_image = get_cropped_tile_image(source_tile, tile_size)
+def add_left_gutter(tile_size, tile_padding, output_image, left_tile_stripe_width=1):
+        twice_tile_vertical_padding = (2 * tile_padding[1])
+        new_target_tile_height = tile_size[1] + twice_tile_vertical_padding
+        cropped_size = (left_tile_stripe_width, new_target_tile_height)
+        left_tile_stripe = get_cropped_tile_image_from_image(output_image, cropped_size, top_left=(tile_padding[0], 0))
+	for i in range(1, tile_padding[0] + 1):
+              output_image.paste(left_tile_stripe, (tile_padding[0] - (left_tile_stripe_width * i), 0))
+
+def add_right_gutter(tile_size, tile_padding, output_image, right_tile_stripe_width=1):
+        twice_tile_vertical_padding = (2 * tile_padding[1])
+        new_target_tile_height = tile_size[1] + twice_tile_vertical_padding
+        cropped_size = (right_tile_stripe_width, new_target_tile_height)        
+        top_left = (tile_size[0] + tile_padding[0] - right_tile_stripe_width, 0)
+        right_tile_stripe = get_cropped_tile_image_from_image(output_image, cropped_size, top_left)
+	for i in range(0, tile_padding[0]):
+              output_image.paste(right_tile_stripe, (tile_size[0] + tile_padding[0] + i, 0))
+
+def add_top_gutter(source_tile, tile_size, tile_padding, output_image, top_tile_stripe_height=1):
+	top_tile_stripe = get_cropped_tile_image_from_tile(source_tile, (tile_size[0], top_tile_stripe_height))
+        for i in range(1, tile_padding[1] + 1):
+              output_image.paste(top_tile_stripe, (tile_padding[0], tile_padding[1] - (top_tile_stripe_height * i)))
+
+def add_bottom_gutter(source_tile, tile_size, tile_padding, output_image, bottom_tile_stripe_height=1):
+	bottom_tile_stripe = get_cropped_tile_image_from_tile(source_tile, (tile_size[0], bottom_tile_stripe_height), top_left_offset=(0, tile_size[1] - bottom_tile_stripe_height))
+        for i in range(0, tile_padding[1]):
+              output_image.paste(bottom_tile_stripe, (tile_padding[0], tile_size[1] + tile_padding[1] + i))
+
+def add_gutter(source_tile, tile_size, tile_padding, output_image):
+        cropped_tile_image = get_cropped_tile_image_from_tile(source_tile, tile_size)
 	output_image.paste(cropped_tile_image, (tile_padding[0], tile_padding[1]))
 
-        top_tile_border_height=1
-	top_tile_border = get_cropped_tile_image(source_tile, (tileset.tile_size[0], top_tile_border_height))
-        for i in range(1, tile_padding[1] + 1):
-              output_image.paste(top_tile_border, (tile_padding[0], tile_padding[1] - (top_tile_border_height * i)))
+        add_top_gutter(source_tile, tileset.tile_size, tile_padding, output_image)
+        add_bottom_gutter(source_tile, tileset.tile_size, tile_padding, output_image)
 
-        bottom_tile_border_height=1
-	bottom_tile_border = get_cropped_tile_image(source_tile, (tileset.tile_size[0], bottom_tile_border_height), top_left_offset=(0, tileset.tile_size[1] - bottom_tile_border_height))
-        for i in range(0, tile_padding[1]):
-              output_image.paste(bottom_tile_border, (tile_padding[0], tileset.tile_size[1] + tile_padding[1] + i))
-
-        left_tile_border_width=1
-        left_tile_border = get_cropped_tile_image_from_image(output_image, (left_tile_border_width, tileset.tile_size[1] + (2 * tile_padding[1])), (tile_padding[0], 0))
-	for i in range(1, tile_padding[0] + 1):
-              output_image.paste(left_tile_border, (tile_padding[0] - (left_tile_border_width * i), 0))
-
-        right_tile_border_width=1
-        right_tile_border = get_cropped_tile_image_from_image(output_image, (right_tile_border_width, tileset.tile_size[1] + (2 * tile_padding[1])), (tileset.tile_size[0] + tile_padding[0] - right_tile_border_width, 0))
-	for i in range(0, tile_padding[0]):
-              output_image.paste(right_tile_border, (tileset.tile_size[0] + tile_padding[0] + i, 0))
-
-
+        add_left_gutter(tileset.tile_size, tile_padding, output_image)
+        add_right_gutter(tileset.tile_size, tile_padding, output_image)
 
 '''
    This method combines several tileset images into a single one. The resulting tileset image is given by target_tilemap_image. 
@@ -163,27 +173,23 @@ def combine_tilesets(tileset, target_tilemap_image, reduced_tile_mapping, target
 				print "reduced tile already seen " + str(reduced_tile_id)
 				reduced_tileset_mapping[tile_id] = reduced_tileset_mapping[reduced_tile_id]
 			else:
-				print "non reduced tile " + str(reduced_tile_id) 
+				# print "non reduced tile " + str(reduced_tile_id) 
 				reduced_tile = tileset[reduced_tile_id]
 			
-				cropped_tile_image = get_cropped_tile_image(reduced_tile, tileset.tile_size)
+				cropped_tile_image = get_cropped_tile_image_from_tile(reduced_tile, tileset.tile_size)
 				### just here for debugging purposes
-#				cropped_tile_image.save('output2/tt_' + str(tile_id) + ".png")
+                                # cropped_tile_image.save('output2/tt_' + str(tile_id) + ".png")
 
-#				box_left = (((target_tile_number - 1) % target_tileset_texture_size[0]) * (tile_width + (2 * tile_horizontal_spacing))) + tile_horizontal_spacing
-#				box_top = (((target_tile_number - 1) / target_tileset_texture_size[0]) * (tile_height + (2 * tile_vertical_spacing))) + tile_vertical_spacing
-		
-				box_left = (((target_tile_number - 1) % target_tileset_texture_size[0]) * (tile_width + (2 * tile_horizontal_spacing))) 
+				box_left = (((target_tile_number - 1) % target_tileset_texture_size[0]) * (tile_width + (2 * tile_horizontal_spacing)))
                                 box_top = (((target_tile_number - 1) / target_tileset_texture_size[0]) * (tile_height + (2 * tile_vertical_spacing))) 
 
 				paste_box = (box_left, box_top)
-                                augment_image(reduced_tile, tileset.tile_size, tile_padding, padded_target_tile)
+                                add_gutter(reduced_tile, tileset.tile_size, tile_padding, padded_target_tile)
 				padded_target_tile.save('output2/tt_aug_' + str(tile_id) + ".png")
 
 				#  print "............. " + str(tile_id) + " , " + str(paste_box)
 				print "............. " + str(target_tile_number) + " , " + str(paste_box)
 	
-			#	target_tilemap_image.paste(cropped_tile_image, paste_box)
 				target_tilemap_image.paste(padded_target_tile, paste_box)
 				reduced_tileset_mapping[tile_id] = target_tile_number
 			
@@ -302,11 +308,11 @@ for input_tilemap_filename in input_tilemap_filenames:
 	total_number_unique_tiles_in_all_tilemaps += shrink_result[0] 
 	
 print "----- total number unique tiles in all tilemaps " + str(total_number_unique_tiles_in_all_tilemaps)
-target_tileset_size = get_texture_size_for_tileset_2(total_number_unique_tiles_in_all_tilemaps, tilemaps[0].tile_size, tile_padding)
+target_tileset_size = get_texture_size_for_tileset(total_number_unique_tiles_in_all_tilemaps, tilemaps[0].tile_size, tile_padding)
 print "----- estimated size " + str(target_tileset_size)
 
 reduced_tileset_mappings = reduce_tilesets(tilesets, output_folder, shrink_results, target_tileset_size, tile_padding)
-print "####### reduced " + str(reduced_tileset_mappings[0])
+print "----- reduced " + str(reduced_tileset_mappings[0])
 
 update_tilemaps(tilemaps, get_target_tilemap_filename(input_tilemap_filename, output_folder), reduced_tileset_mappings, tilemaps[0].tile_size, tile_padding, target_tileset_size[1])
 
